@@ -1,0 +1,39 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+/obj/*.o
+!/obj/fm*
+/obj/*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+/mod/*.mod
+/mod/*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+/bin/*_exec
+
+# Output/Logs
+/dat/*
+*.log
+
+# Miscellaneous
+/misc/*
+/f90/unused/*
+/f90/test.f90
+/*_
