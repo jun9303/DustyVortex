@@ -42,6 +42,7 @@ endif
 # If the obj folder not exists, make this directory
 
 EXE_F = qvortexgen \
+	qvortexrun \
 	dustyqvortgen \
 	dustyqvortrun \
 	test \
