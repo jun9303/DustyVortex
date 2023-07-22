@@ -117,6 +117,17 @@
       ELSE
         TINFO%T = TINFO%T + TINFO%DT
       ENDIF
+ 
+      IF (P%ISFFRMV) THEN
+        IF (MOD(TINFO%N, P%FFRMVINTVL) .EQ. 0) THEN
+          CALL PTFFRMV(PSI=PSI, CHI=CHI, U=U)
+          CALL PTFFRMV(PSI=PSIP, CHI=CHIP, U=UP)
+          IF (MPI_RANK .EQ. 0) THEN
+            WRITE(*,102) 'FAR-FIELD REMOVAL @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
+                         //' '//REPEAT('.',72)
+          ENDIF
+        ENDIF
+      ENDIF
 
       IF (P%ISPTCLTRCK) THEN
         WRITE(11,'(1F15.6,<3*P%PTCLTRCKN>F15.8)') TINFO%T, (PTCL%POS(:3,I), I = 1, P%PTCLTRCKN)
@@ -134,6 +145,11 @@
 
           CALL OUTPUT3D(U, PSI, CHI, F, PTCL, &
                         TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
+
+          IF (MPI_RANK .EQ. 0) THEN
+            WRITE(*,102) 'FIELD & PTCL DATA STORAGE @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
+                         //' '//REPEAT('.',72)
+          ENDIF
         ENDIF
       ENDIF
 
@@ -157,7 +173,8 @@
 
       CLOSE(11)
 
- 101  FORMAT(A48,1X,F13.6,' SECONDS.')
+ 101  FORMAT(A48,2X,F13.6,' SECONDS.')
+ 102  FORMAT(A72)
 
 CONTAINS
 ! =========================================================================================================

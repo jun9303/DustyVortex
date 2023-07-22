@@ -5,41 +5,42 @@ MODULE MISC ! MODULE FOR MISCCELANEOUS SUBROUTINES & FUNCTIONS
 ! ==========================================================================================================
 !  PARAMS/TYPES ============================================================================================
 ! ==========================================================================================================
+      LOGICAL, PARAMETER, PUBLIC     :: WARN_ON = .FALSE. ! WARNING INDICATOR ON/OFF (DEBUGGING PURPOSES)
       INTEGER, PARAMETER, PUBLIC     :: P4 = SELECTED_REAL_KIND(P=6, R=37)   ! S.PRECISION DATATYPE (32-BIT)
       INTEGER, PARAMETER, PUBLIC     :: P8 = SELECTED_REAL_KIND(P=15, R=307) ! D.PRECISION DATATYPE (64-BIT)
       REAL(P8), PARAMETER, PUBLIC    :: PI = ACOS(-1.D0)                     ! 3.141592653589793 ...
       COMPLEX(P8), PARAMETER, PUBLIC :: IU = (0.D0, 1.D0)                    ! IMAGINARY UNIT
-      INTEGER, PUBLIC :: MPI_PROCS = 1, MPI_RANK = 0, IERR                   ! MPI PARAMETERS
-      TYPE, PUBLIC :: INPUT_PARAMS
-        INTEGER                       :: NR, NP, NZ, VISCPOW 
-        REAL(P8)                      :: ELL, ZLEN, VISC, VISCP
+      TYPE, PUBLIC :: INPUT_PARAMS                                           ! INPUT.PARAMS
+        INTEGER           :: NR, NP, NZ, VISCPOW 
+        REAL(P8)          :: ELL, ZLEN, VISC, VISCP
 
-        INTEGER                       :: NI, TOTN
-        REAL(P8)                      :: DT, TI, TOTT
+        INTEGER           :: NI, TOTN
+        REAL(P8)          :: DT, TI, TOTT
 
-        INTEGER                       :: NPARTS
-        REAL(P8)                      :: DIAM, DENS
+        INTEGER           :: NPARTS
+        REAL(P8)          :: DIAM, DENS
 
-        CHARACTER(LEN=1)              :: PDISTTYPE
-        REAL(P8)                      :: XPC, YPC, ZPC, XSCAL, YSCAL, ZSCAL
-        REAL(P8)                      :: VXPC, VYPC, VZPC
+        CHARACTER(LEN=1)  :: PDISTTYPE
+        REAL(P8)          :: XPC, YPC, ZPC, XSCAL, YSCAL, ZSCAL
+        REAL(P8)          :: VXPC, VYPC, VZPC
 
-        REAL(P8)                      :: Q, XQO, YQO
+        REAL(P8)          :: Q, XQO, YQO
 
-        INTEGER                       :: PFFITER
-        REAL(P8)                      :: PFFEPS
+        INTEGER           :: PFFITER
+        REAL(P8)          :: PFFEPS
 
-        LOGICAL                       :: ISFFRMV
-        REAL(P8)                      :: FFRMVINTVL
+        LOGICAL           :: ISFFRMV
+        INTEGER           :: FFRMVINTVL
 
-        CHARACTER(LEN=72)             :: DATDIR
-        LOGICAL                       :: ISDATSAV
-        INTEGER                       :: DATSAVINTVL
+        CHARACTER(LEN=72) :: DATDIR
+        LOGICAL           :: ISDATSAV
+        INTEGER           :: DATSAVINTVL
 
-        CHARACTER(LEN=72)             :: LOGDIR
-        LOGICAL                       :: ISPTCLTRCK
-        INTEGER                       :: PTCLTRCKN
+        CHARACTER(LEN=72) :: LOGDIR
+        LOGICAL           :: ISPTCLTRCK
+        INTEGER           :: PTCLTRCKN
       END TYPE
+      INTEGER, PUBLIC :: MPI_PROCS = 1, MPI_RANK = 0, IERR                   ! MPI PARAMETERS
 ! ==========================================================================================================
 !  DECLARATIONS ============================================================================================
 ! ==========================================================================================================
