@@ -142,6 +142,8 @@ CONTAINS
       TYPE(SCALAR_FIELD), INTENT(IN) :: PSI, CHI
       CHARACTER(LEN=*), INTENT(IN)   :: OUTPUTPATH
 
+      TYPE(SCALAR_FIELD)             :: PSIPPP, CHIPPP
+
       INTEGER                        :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
       INTEGER                        :: FU
 
@@ -157,6 +159,12 @@ CONTAINS
       DO K=1,FINFO%NZ+1,ZSKIP
         KNUM=KNUM+1
       ENDDO
+
+      PSIPPP = PSI
+      CALL TRANS(PSIPPP, 'PPP')
+
+      CHIPPP = CHI
+      CALL TRANS(CHIPPP, 'PPP')
 
       OPEN(FU, FILE=OUTPUTPATH)
 
@@ -179,8 +187,8 @@ CONTAINS
                             REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             REAL(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(PSI%E(I,(JJ+1)/2,KK)),&
-                            REAL(CHI%E(I,(JJ+1)/2,KK))
+                            REAL(PSIPPP%E(I,(JJ+1)/2,KK)),&
+                            REAL(CHIPPP%E(I,(JJ+1)/2,KK))
             ELSE
               WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
                             FINFO%R(I)*SIN(FINFO%P(JJ)),&
@@ -190,14 +198,17 @@ CONTAINS
                             AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
-                            AIMAG(PSI%E(I,(JJ+1)/2,KK)),&
-                            AIMAG(CHI%E(I,(JJ+1)/2,KK))
+                            AIMAG(PSIPPP%E(I,(JJ+1)/2,KK)),&
+                            AIMAG(CHIPPP%E(I,(JJ+1)/2,KK))
             ENDIF
           ENDDO
         ENDDO
       ENDDO
       CLOSE(FU)
 
+      CALL DEALLOC( PSIPPP )
+      CALL DEALLOC( CHIPPP )
+      
 103   FORMAT(8E23.15)
 
       RETURN

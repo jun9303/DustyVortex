@@ -171,7 +171,9 @@
         CALL PRINT_REAL_TIME() ! MISC
       ENDIF
 
+! ....................................................................................................... !
       CLOSE(11)
+! ....................................................................................................... !
 
  101  FORMAT(A48,2X,F13.6,' SECONDS.')
  102  FORMAT(A72)
@@ -189,7 +191,7 @@ CONTAINS
       TYPE(PARTICLE), INTENT(INOUT)  :: PTCL
       CHARACTER(LEN=*), INTENT(IN)   :: OUTPUTPATH
 
-      TYPE(SCALAR_FIELD)             :: PTCLVOL
+      TYPE(SCALAR_FIELD)             :: PTCLVOL, PSIPPP, CHIPPP
 
       INTEGER                        :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
       INTEGER                        :: FU
@@ -209,6 +211,12 @@ CONTAINS
 
       CALL PVOLFRAC(PTCL, PTCLVOL)
       
+      PSIPPP = PSI
+      CALL TRANS(PSIPPP, 'PPP')
+
+      CHIPPP = CHI
+      CALL TRANS(CHIPPP, 'PPP')
+
       OPEN(FU, FILE=OUTPUTPATH)
 
       WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","psi","chi","fpx","fpy","fpz","ptcl"'
@@ -230,8 +238,8 @@ CONTAINS
                             REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             REAL(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(PSI%E(I,(JJ+1)/2,KK)),&
-                            REAL(CHI%E(I,(JJ+1)/2,KK)),&
+                            REAL(PSIPPP%E(I,(JJ+1)/2,KK)),&
+                            REAL(CHIPPP%E(I,(JJ+1)/2,KK)),&
                             REAL(F%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
                               -REAL(F%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
                             REAL(F%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
@@ -247,8 +255,8 @@ CONTAINS
                             AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
-                            AIMAG(PSI%E(I,(JJ+1)/2,KK)),&
-                            AIMAG(CHI%E(I,(JJ+1)/2,KK)),&
+                            AIMAG(PSIPPP%E(I,(JJ+1)/2,KK)),&
+                            AIMAG(CHIPPP%E(I,(JJ+1)/2,KK)),&
                             AIMAG(F%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
                               -AIMAG(F%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
                             AIMAG(F%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
@@ -260,6 +268,10 @@ CONTAINS
         ENDDO
       ENDDO
       CLOSE(FU)
+
+      CALL DEALLOC( PTCLVOL )
+      CALL DEALLOC( PSIPPP )
+      CALL DEALLOC( CHIPPP )
 
 103   FORMAT(12E23.15)
 
