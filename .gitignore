@@ -32,6 +32,7 @@
 # Output/Logs
 /dat/*
 *.log
+*.out
 
 # Miscellaneous
 /f90/unused/*
