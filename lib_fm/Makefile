@@ -29,7 +29,9 @@ vpath %.f90 /
 OBJS = fmsave.o fm.o  fmzm90.o \
 
 all: $(OBJS)
+	mkdir -p ../obj
 	mv *.o ../obj/
+	mkdir -p ../mod
 	mv *.mod ../mod/
 
 .PHONY: clean run 

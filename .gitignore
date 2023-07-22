@@ -17,6 +17,7 @@
 
 # Fortran module files
 /mod/*.mod
+!/mod/fm*
 /mod/*.smod
 
 # Compiled Static libraries
@@ -33,7 +34,6 @@
 *.log
 
 # Miscellaneous
-/misc/*
 /f90/unused/*
 /f90/test.f90
 /*_
