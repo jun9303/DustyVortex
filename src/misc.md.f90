@@ -1,5 +1,4 @@
 MODULE MISC ! MODULE FOR MISCCELANEOUS SUBROUTINES & FUNCTIONS
-      USE OMP_LIB; USE MPI
       IMPLICIT NONE
       PRIVATE
 ! ==========================================================================================================
@@ -40,7 +39,6 @@ MODULE MISC ! MODULE FOR MISCCELANEOUS SUBROUTINES & FUNCTIONS
         LOGICAL           :: ISPTCLTRCK
         INTEGER           :: PTCLTRCKN
       END TYPE
-      INTEGER, PUBLIC :: MPI_PROCS = 1, MPI_RANK = 0, IERR                   ! MPI PARAMETERS
 ! ==========================================================================================================
 !  DECLARATIONS ============================================================================================
 ! ==========================================================================================================
@@ -50,7 +48,6 @@ MODULE MISC ! MODULE FOR MISCCELANEOUS SUBROUTINES & FUNCTIONS
       PUBLIC :: MLOAD                                                            ! LOAD A MATRIX FROM A FILE
       PUBLIC :: ATON                                                                ! ASCII STRING TO NUMBER
       PUBLIC :: NTOA                                                             ! NUMBER TO FIXED-LEN ASCII
-      PUBLIC :: MPI_DECOMPOSE                                      ! BALANCED BLOCK-CONTIGUOUS DECOMPOSITION
       PUBLIC :: READ_INPUTPARAMS                                  ! READ THE INPUT VARIABLES IN input.params
 ! ==========================================================================================================
 !  INTERFACES ==============================================================================================
@@ -92,10 +89,6 @@ MODULE MISC ! MODULE FOR MISCCELANEOUS SUBROUTINES & FUNCTIONS
       INTERFACE NTOA
         MODULE PROCEDURE ITOA
         MODULE PROCEDURE FTOA
-      END INTERFACE
-
-      INTERFACE MPI_DECOMPOSE
-        MODULE PROCEDURE MPI_DECOMPOSE
       END INTERFACE
 
       INTERFACE READ_INPUTPARAMS
@@ -787,37 +780,6 @@ CONTAINS
   
       RETURN
       END FUNCTION
-! ==========================================================================================================
-      SUBROUTINE MPI_DECOMPOSE(N,M,P,NN,S)
-! ==========================================================================================================
-! [USAGE]: 
-! BALANCED BLOCK-CONTIGUOUS DECOMPOSITION. REF. DALCIN ET AL., 2018, J PARALLEL DISTR COM
-! [VARAIBLES]:
-! N  >> TOTAL NUMBER OF ELEMENTS (SLABS)
-! M  >> NUMBER OF PARTS (MPI PROCESSORS) @ MPI_COMM_SIZE
-! P  >> PART INDEX, P = 0, 1, ..., M-2, M-1
-! NN >> (OUTPUT) NUMBER OF ELEMENTS IN THE P-TH PART
-! S  >> (OUTPUT) START INDEX OF THE P-TH PART
-! [NOTES]:
-! SANGJOON LEE @ JUNE 2023
-! ==========================================================================================================
-      IMPLICIT NONE
-      INTEGER, INTENT(IN)    :: N,M,P
-      INTEGER, INTENT(INOUT) :: NN,S
-      INTEGER                :: Q,R
-
-      Q = N/M
-      R = MOD(N,M)
-
-      IF (R .GT. P) THEN
-        NN = Q + 1
-      ELSE
-        NN = Q
-      ENDIF
-      S = Q * P + MIN(R, P)
-
-      RETURN
-      END SUBROUTINE
 ! ==========================================================================================================
       SUBROUTINE READ_INPUTPARAMS(PARAMS)
 ! ==========================================================================================================

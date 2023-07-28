@@ -1,4 +1,4 @@
-FC = mpiifort
+FC = ifort
 # Fortran compiler (FC) (ifort: Intel compiler - recommended)
 
 SRC_DIR = src
@@ -10,7 +10,7 @@ MOD_DIR = mod
 BIN_DIR = bin
 # Bin file directory
 
-FFLG = -r8 -O3 -qopenmp -qmkl=parallel
+FFLG = -r8 -O2 -qmkl
 # Fortran compiler flag
 FINC = -I${MKLROOT}/include/fftw 
 # Fortran include files

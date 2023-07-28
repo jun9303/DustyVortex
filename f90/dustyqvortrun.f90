@@ -26,12 +26,10 @@
 
       TYPE(INPUT_PARAMS)            :: P
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM STARTED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM STARTED ***'
+      CALL PRINT_REAL_TIME() ! MISC
+      CALL CPU_TIME(START) ! OMP_LIB
 
 ! ....................................................................................................... !  
 
@@ -41,11 +39,9 @@
       CALL TIME_INIT(DTIN=P%DT, TIIN=P%TI, TOTTIN=P%TOTT, NIIN=P%NI, TOTNIN=P%TOTN)
       CALL PARTICLE_INIT(DIAMIN=P%DIAM, DENSIN=P%DENS, NPARTSIN=P%NPARTS, VISCIN=P%VISC)
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'FIELD, TIME & PARTICLE INITALIZATION'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      CALL CPU_TIME(FINISH) ! OMP_LIB
+      WRITE(*,101) 'FIELD, TIME & PARTICLE INITALIZATION'//' '//REPEAT('.',48), FINISH-START
+      CALL CPU_TIME(START) ! OMP_LIB
 
 ! ....................................................................................................... !
       IF (P%ISPTCLTRCK) OPEN(UNIT=11, FILE=TRIM(ADJUSTL(P%LOGDIR))//'ptcl.log')
@@ -63,11 +59,9 @@
       CALL OUTPUT3D(U, PSI, CHI, F, PTCL, &
                     TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      CALL CPU_TIME(FINISH) ! OMP_LIB
+      WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
+      CALL CPU_TIME(START) ! OMP_LIB
 
       IF (P%ISPTCLTRCK) THEN
         WRITE(11,'(1F15.6,<3*P%PTCLTRCKN>F15.8)') TINFO%T, (PTCL%POS(:3,I), I = 1, P%PTCLTRCKN)
@@ -87,11 +81,9 @@
         TINFO%T = TINFO%T + TINFO%DT
       ENDIF
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) '1ST TIME STEP BOOTSTRAP - FLOW & PARTICLES'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      CALL CPU_TIME(FINISH) ! OMP_LIB
+      WRITE(*,101) '1ST TIME STEP BOOTSTRAP - FLOW & PARTICLES'//' '//REPEAT('.',48), FINISH-START
+      CALL CPU_TIME(START) ! OMP_LIB
 
       IF (P%ISPTCLTRCK) THEN
         WRITE(11,'(1F15.6,<3*P%PTCLTRCKN>F15.8)') TINFO%T, (PTCL%POS(:3,I), I = 1, P%PTCLTRCKN)
@@ -122,10 +114,8 @@
         IF (MOD(TINFO%N, P%FFRMVINTVL) .EQ. 0) THEN
           CALL PTFFRMV(PSI=PSI, CHI=CHI, U=U)
           CALL PTFFRMV(PSI=PSIP, CHI=CHIP, U=UP)
-          IF (MPI_RANK .EQ. 0) THEN
-            WRITE(*,102) 'FAR-FIELD REMOVAL @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
-                         //' '//REPEAT('.',72)
-          ENDIF
+          WRITE(*,102) 'FAR-FIELD REMOVAL @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
+                       //' '//REPEAT('.',72)
         ENDIF
       ENDIF
 
@@ -146,30 +136,24 @@
           CALL OUTPUT3D(U, PSI, CHI, F, PTCL, &
                         TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
 
-          IF (MPI_RANK .EQ. 0) THEN
-            WRITE(*,102) 'FIELD & PTCL DATA STORAGE @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
-                         //' '//REPEAT('.',72)
-          ENDIF
+          WRITE(*,102) 'FIELD & PTCL DATA STORAGE @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
+                       //' '//REPEAT('.',72)
         ENDIF
       ENDIF
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'TIME STEPPING # '//NTOA(TINFO%N,'(I10)')//' '//'(T: '//NTOA(TINFO%T,'(F11.6)')//')'&
-                     //' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      CALL CPU_TIME(FINISH) ! OMP_LIB
+      WRITE(*,101) 'TIME STEPPING # '//NTOA(TINFO%N,'(I10)')//' '//'(T: '//NTOA(TINFO%T,'(F11.6)')//')'&
+                   //' '//REPEAT('.',48), FINISH-START
+      CALL CPU_TIME(START) ! OMP_LIB
 
 ! ....................................................................................................... !
       ENDDO
 ! ....................................................................................................... !
 ! ....................................................................................................... !
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM FINISHED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM FINISHED ***'
+      CALL PRINT_REAL_TIME() ! MISC
 
 ! ....................................................................................................... !
       CLOSE(11)

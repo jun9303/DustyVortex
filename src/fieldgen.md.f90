@@ -1,5 +1,4 @@
 MODULE FIELDGEN ! MODULE FOR 3D SCALAR/VECTOR FIELD GENERATION SUBROUTINES & FUNCTIONS
-      USE OMP_LIB; USE MPI
       USE MISC; USE MATOPS
       USE LEGENDRE; USE FOURIER
       IMPLICIT NONE
@@ -950,7 +949,6 @@ CONTAINS
       AF(:,FINFO%NP+1,:) = AF(:,1,:)
       AF(:,:,FINFO%NZ+1) = AF(:,:,1)
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(N,I,J,K,X,Y,Z,V)
       DO N = 1, SIZE(RIN)
         IF (RIN(N) .LT. FINFO%R(1)) THEN
           I = 0
@@ -990,7 +988,6 @@ CONTAINS
                   V(1,1,1)*      X *      Y *      Z  + V(1,1,0)*      X *      Y *(1.D0-Z) + &
                   V(1,0,1)*      X *(1.D0-Y)*      Z  + V(0,1,1)*(1.D0-X)*      Y *      Z
       ENDDO
-!$OMP END PARALLEL DO
 
       RETURN
       END FUNCTION
@@ -1080,7 +1077,6 @@ CONTAINS
       AF(:,FINFO%NP+1,:,:) = AF(:,1,:,:)
       AF(:,:,FINFO%NZ+1,:) = AF(:,:,1,:)
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(N,I,J,K,X,Y,Z,V)
       DO N = 1, SIZE(RIN)
         IF (RIN(N) .LT. FINFO%R(1)) THEN
           I = 0
@@ -1120,7 +1116,6 @@ CONTAINS
                     V(1,1,1,:)*      X *      Y *      Z  + V(1,1,0,:)*      X *      Y *(1.D0-Z) + &
                     V(1,0,1,:)*      X *(1.D0-Y)*      Z  + V(0,1,1,:)*(1.D0-X)*      Y *      Z
       ENDDO
-!$OMP END PARALLEL DO
 
       RETURN
       END FUNCTION
@@ -1336,13 +1331,11 @@ CONTAINS
       CALL TRANS_SCALAR(AT, 'PPP')
 
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
       DO MM = 1, FINFO%NPH
         DO KK = 1, FINFO%NZ
           AT%E(:FINFO%NR,MM,KK) = AT%E(:FINFO%NR,MM,KK)/(1.D0-TFM%X)**2.D0
         ENDDO
       ENDDO
-!$OMP END PARALLEL DO
 
       CALL TRANS_SCALAR(AT, 'FFF')
 
@@ -1375,7 +1368,6 @@ CONTAINS
       AT = A
       CALL TRANS_VECTOR(AT, 'PPP')
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
       DO MM = 1, FINFO%NPH
         DO KK = 1, FINFO%NZ
           AT%ER(:FINFO%NR,MM,KK) = AT%ER(:FINFO%NR,MM,KK)/(1.D0-TFM%X)**2.D0
@@ -1383,7 +1375,6 @@ CONTAINS
           AT%EZ(:FINFO%NR,MM,KK) = AT%EZ(:FINFO%NR,MM,KK)/(1.D0-TFM%X)**2.D0
         ENDDO
       ENDDO
-!$OMP END PARALLEL DO
 
       CALL TRANS_VECTOR(AT, 'FFF')
 
@@ -1679,7 +1670,6 @@ CONTAINS
         B = 0.D0
         C = 0.D0
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(II, KK, MM, B, C)
         DO II = 1, FINFO%NR
           DO KK = 1, FINFO%NZ
             B = AE(II, :FINFO%NPDIM, KK)
@@ -1692,7 +1682,6 @@ CONTAINS
             AE(II, :FINFO%NPDIM, KK) = B/(2*FINFO%NPH)
           ENDDO
         ENDDO
-!$OMP END PARALLEL DO
 
         IF (.NOT. ALL(ABS(AE(:,NPC+1:,:)) .LT. 1.D-14)) THEN
           IF (WARN_ON) WRITE(*,*) 'HORFFT/F: [WARNING] RESIDUES IN THE REGION TO BE CHOPPED.'
@@ -1717,7 +1706,6 @@ CONTAINS
         B = 0.D0
         C = 0.D0
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(II, KK, MM, B, C)
         DO II = 1, FINFO%NR
           DO KK = 1, FINFO%NZ
             B = AE(II, :FINFO%NPDIM, KK)
@@ -1729,7 +1717,6 @@ CONTAINS
             AE(II, FINFO%NPH+1:, KK) = 0.D0
           ENDDO
         ENDDO
-!$OMP END PARALLEL DO
 
         DEALLOCATE( B )
         DEALLOCATE( C )
@@ -1789,7 +1776,6 @@ CONTAINS
         ALLOCATE( BE(FINFO%NRH, FINFO%NZDIM) )
         ALLOCATE( BO(FINFO%NRH, FINFO%NZDIM) )
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, BE, BO)
         DO MM = 1, NPC
           BE = 0.D0
           BO = 0.D0
@@ -1807,7 +1793,6 @@ CONTAINS
             A(2:NN:2, MM, :) = TRANSPOSE(TFM%PF(:FINFO%NRH, 2:NN:2, MM)) .MUL. BO
           ENDIF
         ENDDO
-!$OMP END PARALLEL DO
 
         AE = A
 
@@ -1817,7 +1802,6 @@ CONTAINS
         ALLOCATE( BE(FINFO%NRH, FINFO%NZDIM) )
         ALLOCATE( BO(FINFO%NRH, FINFO%NZDIM) )
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, BE, BO)
         DO MM = 1, NPC
           BE = 0.D0
           BO = 0.D0
@@ -1837,7 +1821,6 @@ CONTAINS
           A(1:FINFO%NRH, MM, :) = BE+BO
           A(FINFO%NR:FINFO%NRH+1:-1, MM, :) = BE-BO
         ENDDO
-!$OMP END PARALLEL DO
 
         AE = A
 
@@ -1903,7 +1886,6 @@ CONTAINS
 
         B = 0.D0
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(JJ, II, B)
         DO JJ = 1, NPC
           DO II = 1, NRCS(JJ)
             B = AE(II, JJ, :FINFO%NZ)
@@ -1911,7 +1893,6 @@ CONTAINS
             AE(II, JJ, :FINFO%NZ) = B/FINFO%NZ
           ENDDO
         ENDDO
-!$OMP END PARALLEL DO
 
         IF (NZC .LE. FINFO%NZ-NZC+2) THEN
           IF (.NOT. ALL(ABS(AE(:,:,NZC+1:FINFO%NZ-NZC+1)) .LT. 1.D-14)) THEN
@@ -1935,7 +1916,6 @@ CONTAINS
 
         B = 0.D0
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(JJ, II, B)
         DO JJ = 1, NPC
           DO II = 1, NRCS(JJ)
             B = AE(II, JJ, :FINFO%NZ)
@@ -1943,7 +1923,6 @@ CONTAINS
             AE(II, JJ, :FINFO%NZ) = B
           ENDDO
         ENDDO
-!$OMP END PARALLEL DO
 
         DEALLOCATE( B )
 
