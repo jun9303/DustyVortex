@@ -1,4 +1,4 @@
-FC = mpiifort
+FC = ifort
 # Fortran compiler (FC) (ifort: Intel compiler - recommended)
 
 SRC_DIR = src

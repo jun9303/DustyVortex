@@ -10,7 +10,7 @@
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! =========================================================================================================
-      USE OMP_LIB; USE MPI
+      USE OMP_LIB
       USE MISC; USE MATOPS; USE TIMEINFO 
       USE FIELDGEN; USE FIELDOPS; USE FIELDSTEP
       USE PARTICLEGEN; USE PARTICLEINTF; USE PARTICLESTEP
@@ -24,12 +24,10 @@
 
       TYPE(INPUT_PARAMS)            :: P
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM STARTED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM STARTED ***'
+      CALL PRINT_REAL_TIME() ! MISC
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !  
 
@@ -38,11 +36,9 @@
                       VISCIN=P%VISC, VISCPOW=P%VISCPOW, VISCPIN=P%VISCP)
       CALL TIME_INIT(DTIN=P%DT, TIIN=P%TI, TOTTIN=P%TOTT, NIIN=P%NI, TOTNIN=P%TOTN)
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'FIELD, TIME & PARTICLE INITALIZATION'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'FIELD, TIME & PARTICLE INITALIZATION'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 
@@ -55,11 +51,9 @@
       CALL OUTPUT3D(U, PSI, CHI, &
                     TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 
@@ -74,11 +68,9 @@
         TINFO%T = TINFO%T + TINFO%DT
       ENDIF
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) '1ST TIME STEP BOOTSTRAP - FLOW'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) '1ST TIME STEP BOOTSTRAP - FLOW'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 ! ....................................................................................................... !
@@ -108,23 +100,19 @@
         ENDIF
       ENDIF
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'TIME STEPPING # '//NTOA(TINFO%N,'(I10)')//' '//'(T: '//NTOA(TINFO%T,'(F11.6)')//')'&
-                     //' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'TIME STEPPING # '//NTOA(TINFO%N,'(I10)')//' '//'(T: '//NTOA(TINFO%T,'(F11.6)')//')'&
+                   //' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
       ENDDO
 ! ....................................................................................................... !
 ! ....................................................................................................... !
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM FINISHED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM FINISHED ***'
+      CALL PRINT_REAL_TIME() ! MISC
 
       CLOSE(11)
 

@@ -10,7 +10,7 @@
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! =========================================================================================================
-      USE OMP_LIB; USE MPI
+      USE OMP_LIB
       USE MISC; USE MATOPS; USE TIMEINFO 
       USE FIELDGEN; USE FIELDOPS; USE FIELDSTEP
 
@@ -23,12 +23,10 @@
 
       TYPE(INPUT_PARAMS)            :: P
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM STARTED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM STARTED ***'
+      CALL PRINT_REAL_TIME() ! MISC
+      START = OMP_GET_WTIME() ! OMP_LIB
       
 ! ....................................................................................................... !
 
@@ -37,11 +35,9 @@
                       VISCIN=P%VISC, VISCPOW=P%VISCPOW, VISCPIN=P%VISCP)
       CALL TIME_INIT(DTIN=P%DT, TIIN=P%TI, TOTTIN=P%TOTT, NIIN=P%NI, TOTNIN=P%TOTN)
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'FIELD, TIME INITALIZATION'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'FIELD, TIME INITALIZATION'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 
@@ -50,11 +46,9 @@
       CALL VELPROJ(U,PSI,CHI,PSILN=-.5)
       U = PT2VEL(PSI,CHI)
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'Q-VORTEX VELOCITY FIELD SETUP'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'Q-VORTEX VELOCITY FIELD SETUP'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 
@@ -63,19 +57,15 @@
       CALL MSAVE(PSI, TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/psi.sfld')
       CALL MSAVE(CHI, TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/chi.sfld')
 
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'INITIAL FIELDS STORED'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
-      ENDIF
+      FINISH = OMP_GET_WTIME() ! OMP_LIB
+      WRITE(*,101) 'INITIAL FIELDS STORED'//' '//REPEAT('.',48), FINISH-START
+      START = OMP_GET_WTIME() ! OMP_LIB
 
 ! ....................................................................................................... !
 
-      IF (MPI_RANK .EQ. 0) THEN
-        WRITE(*,*) ''
-        WRITE(*,*) '*** PROGRAM FINISHED ***'
-        CALL PRINT_REAL_TIME() ! MISC
-      ENDIF
+      WRITE(*,*) ''
+      WRITE(*,*) '*** PROGRAM FINISHED ***'
+      CALL PRINT_REAL_TIME() ! MISC
 
  101  FORMAT(A48,1X,F13.6,' SECONDS.')
 
