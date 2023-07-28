@@ -217,11 +217,11 @@ CONTAINS
       IF (TYPE(1:1) .EQ. 'B') THEN
         PO = PO - 0.5D0
       ELSEIF (TYPE(1:1) .EQ. 'C') THEN
-        PO(1,:) = PO(1,:) * 0.5D0
+        PO(1,:) = PO(1,:)**(1.D0/2.D0) * 0.5D0
         PO(2,:) = PO(2,:) * 2.D0*PI
         PO(3,:) = PO(3,:) - 0.5D0
       ELSEIF (TYPE(1:1) .EQ. 'S') THEN
-        PO(1,:) = PO(1,:) * 0.5D0
+        PO(1,:) = PO(1,:)**(1.D0/3.D0) * 0.5D0
         PO(2,:) = PO(2,:) * PI
         PO(3,:) = PO(3,:) * 2.D0*PI
       ENDIF
