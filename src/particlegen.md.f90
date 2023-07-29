@@ -208,7 +208,7 @@ CONTAINS
       REAL(P8), DIMENSION(3)               :: VEL_ = (/ 0.D0, 0.D0, 0.D0 /)
       REAL(P8), DIMENSION(3, PINFO%NPARTS) :: PO
 
-      TOL = .02D0
+      TOL = .05D0
 
       IF (PRESENT(VEL)) VEL_ = VEL
 
