@@ -204,9 +204,11 @@ CONTAINS
       REAL(P8), DIMENSION(3), OPTIONAL     :: VEL
 
       INTEGER                              :: N
-      REAL(P8)                             :: X, Y, Z
+      REAL(P8)                             :: X, Y, Z, TOL
       REAL(P8), DIMENSION(3)               :: VEL_ = (/ 0.D0, 0.D0, 0.D0 /)
       REAL(P8), DIMENSION(3, PINFO%NPARTS) :: PO
+
+      TOL = .02D0
 
       IF (PRESENT(VEL)) VEL_ = VEL
 
@@ -217,11 +219,11 @@ CONTAINS
       IF (TYPE(1:1) .EQ. 'B') THEN
         PO = PO - 0.5D0
       ELSEIF (TYPE(1:1) .EQ. 'C') THEN
-        PO(1,:) = PO(1,:)**(1.D0/2.D0) * 0.5D0
+        PO(1,:) = PO(1,:)**(1.D0/2.D0) * 0.5D0 + TOL
         PO(2,:) = PO(2,:) * 2.D0*PI
         PO(3,:) = PO(3,:) - 0.5D0
       ELSEIF (TYPE(1:1) .EQ. 'S') THEN
-        PO(1,:) = PO(1,:)**(1.D0/3.D0) * 0.5D0
+        PO(1,:) = PO(1,:)**(1.D0/3.D0) * 0.5D0 + TOL
         PO(2,:) = PO(2,:) * PI
         PO(3,:) = PO(3,:) * 2.D0*PI
       ENDIF
