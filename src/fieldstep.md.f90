@@ -584,7 +584,7 @@ CONTAINS
       IF (ORDER_ .EQ. 2) THEN
         ! 2*PSI_EULER_DDT/2(TI+DT) - PSI_EULER_DDT(TI+DT) ~ O(DT^2))
         PSI%E = 2.D0*PSI2%E - PSI1%E
-        CHI%E = 1.D0*CHI2%E - CHI1%E
+        CHI%E = 2.D0*CHI2%E - CHI1%E
         GOTO 999
       ENDIF
 
