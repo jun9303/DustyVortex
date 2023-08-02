@@ -192,6 +192,7 @@ CONTAINS
       CHARACTER(LEN=*), INTENT(IN)   :: OUTPUTPATH
 
       TYPE(SCALAR_FIELD)             :: PTCLVOL, PSIPPP, CHIPPP
+      TYPE(VECTOR_FIELD)             :: O
 
       INTEGER                        :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
       INTEGER                        :: FU
@@ -217,9 +218,11 @@ CONTAINS
       CHIPPP = CHI
       CALL TRANS(CHIPPP, 'PPP')
 
+      O = PT2VOR(PSI, CHI)
+
       OPEN(FU, FILE=OUTPUTPATH)
 
-      WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","psi","chi","fpx","fpy","fpz","ptcl"'
+      WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","wx","wy","wz","fpx","fpy","fpz","ptcl"'
       WRITE(FU,*)'ZONE T="ZONE1" , I=',INUM,', J=',JNUM,', K=',KNUM,', ZONETYPE=Ordered'
       WRITE(FU,*)'DATAPACKING=POINT'
       DO K=1,FINFO%NZ+1,ZSKIP
@@ -238,8 +241,11 @@ CONTAINS
                             REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             REAL(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(PSIPPP%E(I,(JJ+1)/2,KK)),&
-                            REAL(CHIPPP%E(I,(JJ+1)/2,KK)),&
+                            REAL(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -REAL(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +REAL(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(O%EZ(I,(JJ+1)/2,KK)),&
                             REAL(F%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
                               -REAL(F%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
                             REAL(F%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
@@ -255,8 +261,11 @@ CONTAINS
                             AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
-                            AIMAG(PSIPPP%E(I,(JJ+1)/2,KK)),&
-                            AIMAG(CHIPPP%E(I,(JJ+1)/2,KK)),&
+                            AIMAG(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -AIMAG(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            AIMAG(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +AIMAG(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            AIMAG(O%EZ(I,(JJ+1)/2,KK)),&
                             AIMAG(F%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
                               -AIMAG(F%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
                             AIMAG(F%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
@@ -273,7 +282,7 @@ CONTAINS
       CALL DEALLOC( PSIPPP )
       CALL DEALLOC( CHIPPP )
 
-103   FORMAT(12E23.15)
+103   FORMAT(13E23.15)
 
       RETURN
       END SUBROUTINE
