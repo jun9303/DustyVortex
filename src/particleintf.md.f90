@@ -100,15 +100,13 @@ CONTAINS
 
       INTEGER                             :: I, J, K, N, M
       REAL(P8), DIMENSION(3)              :: XO, X
-      REAL(P8)                            :: DP, DZ, R2, SIGMA
+      REAL(P8)                            :: R2, SIGMA
       REAL(P8)                            :: INTE
 
       CALL ALLOC(PVOL, 'PPP')
       PVOL%E = 0.D0
 
-      DP = 2.D0*PI / FINFO%NP
-      DZ = FINFO%ZLEN / FINFO%NZ
-      SIGMA = (FINFO%ELL/FINFO%NRH*DP*DZ)**(1.D0/3.D0)
+      SIGMA = 3.D0*((PI*FINFO%ELL2*FINFO%ZLEN)/(FINFO%NRH*FINFO%NP*FINFO%NZ))**(1.D0/3.D0)
 
       DO N = 1, PINFO%NPARTS
         XO(1) = PTCL%POS(1,N)
@@ -161,7 +159,7 @@ CONTAINS
 
       INTEGER                             :: I, J, K, N, M
       REAL(P8), DIMENSION(3)              :: XO, X
-      REAL(P8)                            :: DP, DZ, R2, SIGMA
+      REAL(P8)                            :: R2, SIGMA
       REAL(P8), DIMENSION(3)              :: INTE
 
       CALL ALLOC(PVFLD, 'PPP')
@@ -169,9 +167,7 @@ CONTAINS
       PVFLD%EP = 0.D0
       PVFLD%EZ = 0.D0
 
-      DP = 2.D0*PI / FINFO%NP
-      DZ = FINFO%ZLEN / FINFO%NZ
-      SIGMA = (FINFO%ELL/FINFO%NRH*DP*DZ)**(1.D0/3.D0)
+      SIGMA = 3.D0*((PI*FINFO%ELL2*FINFO%ZLEN)/(FINFO%NRH*FINFO%NP*FINFO%NZ))**(1.D0/3.D0)
 
       DO N = 1, PINFO%NPARTS
         XO(1) = PTCL%POS(1,N)
@@ -230,7 +226,7 @@ CONTAINS
 
       INTEGER                             :: I, J, K, N, M
       REAL(P8), DIMENSION(3)              :: XO, X
-      REAL(P8)                            :: DP, DZ, R2, SIGMA
+      REAL(P8)                            :: R2, SIGMA
       REAL(P8), DIMENSION(3)              :: INTE
 
       CALL ALLOC(PFFLD, 'PPP')
@@ -238,9 +234,7 @@ CONTAINS
       PFFLD%EP = 0.D0
       PFFLD%EZ = 0.D0
 
-      DP = 2.D0*PI / FINFO%NP
-      DZ = FINFO%ZLEN / FINFO%NZ
-      SIGMA = (FINFO%ELL/FINFO%NRH*DP*DZ)**(1.D0/3.D0)
+      SIGMA = 3.D0*((PI*FINFO%ELL2*FINFO%ZLEN)/(FINFO%NRH*FINFO%NP*FINFO%NZ))**(1.D0/3.D0)
 
       DO N = 1, PINFO%NPARTS
         XO(1) = PTCL%POS(1,N)
