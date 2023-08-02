@@ -186,16 +186,16 @@ CONTAINS
 ! =========================================================================================================
       IMPLICIT NONE
 
-      TYPE(VECTOR_FIELD), INTENT(IN) :: U, F
-      TYPE(SCALAR_FIELD), INTENT(IN) :: PSI, CHI
-      TYPE(PARTICLE), INTENT(INOUT)  :: PTCL
-      CHARACTER(LEN=*), INTENT(IN)   :: OUTPUTPATH
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U, F
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: PSI, CHI
+      TYPE(PARTICLE), INTENT(INOUT)     :: PTCL
+      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
 
-      TYPE(SCALAR_FIELD)             :: PTCLVOL, PSIPPP, CHIPPP
-      TYPE(VECTOR_FIELD)             :: O
+      TYPE(SCALAR_FIELD)                :: PTCLVOL, PSIPPP, CHIPPP
+      TYPE(VECTOR_FIELD)                :: O
 
-      INTEGER                        :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
-      INTEGER                        :: FU
+      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
+      INTEGER                           :: FU
 
       INUM = 0; JNUM = 0; KNUM = 0
       RSKIP = 1; PSKIP = 1; ZSKIP = 1
