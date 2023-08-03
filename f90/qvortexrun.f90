@@ -165,7 +165,7 @@ CONTAINS
       OPEN(FU, FILE=OUTPUTPATH)
 
       WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","wx","wy","wz"'
-      WRITE(FU,*)'ZONE T="', TRIM(ADJUTL(NTOA(TINFO%T,'(F8.3)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
+      WRITE(FU,*)'ZONE T="', TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
                  ', ZONETYPE=Ordered'
       WRITE(FU,*)'DATAPACKING=POINT'
       DO K=1,FINFO%NZ+1,ZSKIP
