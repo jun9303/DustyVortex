@@ -138,14 +138,14 @@ CONTAINS
 ! =========================================================================================================
       IMPLICIT NONE
 
-      TYPE(VECTOR_FIELD), INTENT(IN) :: U
-      TYPE(SCALAR_FIELD), INTENT(IN) :: PSI, CHI
-      CHARACTER(LEN=*), INTENT(IN)   :: OUTPUTPATH
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: PSI, CHI
+      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
 
-      TYPE(SCALAR_FIELD)             :: PSIPPP, CHIPPP
+      TYPE(VECTOR_FIELD)                :: O
 
-      INTEGER                        :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
-      INTEGER                        :: FU
+      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
+      INTEGER                           :: FU
 
       INUM = 0; JNUM = 0; KNUM = 0
       RSKIP = 1; PSKIP = 1; ZSKIP = 1
@@ -160,15 +160,11 @@ CONTAINS
         KNUM=KNUM+1
       ENDDO
 
-      PSIPPP = PSI
-      CALL TRANS(PSIPPP, 'PPP')
-
-      CHIPPP = CHI
-      CALL TRANS(CHIPPP, 'PPP')
+      O = PT2VOR(PSI, CHI)
 
       OPEN(FU, FILE=OUTPUTPATH)
 
-      WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","psi","chi"'
+      WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","wx","wy","wz"'
       WRITE(FU,*)'ZONE T="ZONE1" , I=',INUM,', J=',JNUM,', K=',KNUM,', ZONETYPE=Ordered'
       WRITE(FU,*)'DATAPACKING=POINT'
       DO K=1,FINFO%NZ+1,ZSKIP
@@ -187,8 +183,11 @@ CONTAINS
                             REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             REAL(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(PSIPPP%E(I,(JJ+1)/2,KK)),&
-                            REAL(CHIPPP%E(I,(JJ+1)/2,KK))
+                            REAL(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -REAL(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +REAL(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(O%EZ(I,(JJ+1)/2,KK))
             ELSE
               WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
                             FINFO%R(I)*SIN(FINFO%P(JJ)),&
@@ -198,8 +197,11 @@ CONTAINS
                             AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
                               +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
                             AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
-                            AIMAG(PSIPPP%E(I,(JJ+1)/2,KK)),&
-                            AIMAG(CHIPPP%E(I,(JJ+1)/2,KK))
+                            REAL(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -REAL(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +REAL(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(O%EZ(I,(JJ+1)/2,KK))
             ENDIF
           ENDDO
         ENDDO
