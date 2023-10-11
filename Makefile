@@ -43,8 +43,6 @@ endif
 
 EXE_F = qvortexgen \
 	qvortexrun \
-	dustyqvortgen \
-	dustyqvortrun \
 	test \
 # Program scripts in the f90 folder (ADD/REMOVE THE PROGRAM LISTS HERE)
 # Using 'make [program_name]' will create the executable program file in the bin folder
@@ -64,7 +62,7 @@ $(EXE_F): $(OBJ_F)
 # Produce an executable file labeled by _exec
 
 clean:
-	rm -f ./*.dat
+	rm -rf ./dat/*
 	find ./$(OBJ_DIR)/ ! -name 'fm*' -exec rm -f {} \;
 	find ./$(MOD_DIR)/ ! -name 'fm*' -exec rm -f {} \;
 	rm -f ./$(BIN_DIR)/*

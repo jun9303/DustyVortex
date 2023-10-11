@@ -13,16 +13,17 @@
       USE OMP_LIB; USE MPI
       USE MISC; USE MATOPS; USE TIMEINFO 
       USE FIELDGEN; USE FIELDOPS; USE FIELDSTEP
-      USE PARTICLEGEN; USE PARTICLEINTF; USE PARTICLESTEP
+      USE PARTICLESTEP
 
       IMPLICIT NONE
 
-      INTEGER                       :: I, J, K
+      INTEGER                       :: MM, NN, KK
       REAL(P8)                      :: START, FINISH
-      TYPE(SCALAR_FIELD)            :: PSI, CHI, PSIP, CHIP
-      TYPE(VECTOR_FIELD)            :: U, UP
+      TYPE(SCALAR_FIELD)            :: PSI, CHI, PSI_UNP, CHI_UNP, C, CP
+      TYPE(SCALAR_FIELD)            :: PSIP, CHIP, PSIPP, CHIPP, PSIP_UNP, CHIP_UNP, PSIPP_UNP, CHIPP_UNP
+      TYPE(VECTOR_FIELD)            :: F, FP, FPP, U, U_UNP, W, W_UNP
 
-      TYPE(INPUT_PARAMS)            :: P
+      TYPE(INPUT_PARAMS)            :: PRMS
 
       IF (MPI_RANK .EQ. 0) THEN
         WRITE(*,*) ''
@@ -31,41 +32,45 @@
         START = OMP_GET_WTIME() ! OMP_LIB
       ENDIF
 
-! ....................................................................................................... !  
+! ....................................................................................................... !
 
-      CALL READ_INPUTPARAMS(PARAMS=P)
-      CALL FIELD_INIT(NRIN=P%NR, NPIN=P%NP, NZIN=P%NZ, ELLIN=P%ELL, ZLENIN=P%ZLEN, &
-                      VISCIN=P%VISC, VISCPOW=P%VISCPOW, VISCPIN=P%VISCP)
-      CALL TIME_INIT(DTIN=P%DT, TIIN=P%TI, TOTTIN=P%TOTT, NIIN=P%NI, TOTNIN=P%TOTN)
+      CALL READ_INPUTPARAMS(PARAMS=PRMS)
+      CALL FIELD_INIT(NRIN=PRMS%NR, NPIN=PRMS%NP, NZIN=PRMS%NZ, ELLIN=PRMS%ELL, ZLENIN=PRMS%ZLEN, &
+                      NRCHOPIN=PRMS%NRCHOP, NPCHOPIN=PRMS%NPCHOP, NZCHOPIN=PRMS%NZCHOP, &
+                      VISCIN=PRMS%VISC, VISCPOW=PRMS%VISCPOW, VISCPIN=PRMS%VISCP, &
+                      PTCRESPIN=PRMS%PTCRESP, PTCDENSIN=PRMS%PTCDENS)
+      CALL TIME_INIT(DTIN=PRMS%DT, TIIN=PRMS%TI, TOTTIN=PRMS%TOTT, NIIN=PRMS%NI, TOTNIN=PRMS%TOTN)
 
       IF (MPI_RANK .EQ. 0) THEN
         FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'FIELD, TIME & PARTICLE INITALIZATION'//' '//REPEAT('.',48), FINISH-START
+        WRITE(*,101) 'FIELD, TIME INITIALIZATION'//' '//REPEAT('.',48), FINISH-START
         START = OMP_GET_WTIME() ! OMP_LIB
       ENDIF
 
 ! ....................................................................................................... !
 
-      CALL SYSTEM('mkdir -p '//TRIM(ADJUSTL(P%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))))
+      ! TIMESTEP 0 (T==0)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi.sfld', PSIP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi.sfld', CHIP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi_unp.sfld', PSIP_UNP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi_unp.sfld', CHIP_UNP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/c.sfld', CP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/f.vfld', FP)
 
-      CALL MLOAD(TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/u.vfld'  , U   )
-      CALL MLOAD(TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/psi.sfld', PSI )
-      CALL MLOAD(TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/chi.sfld', CHI )
-      
-      CALL OUTPUT3D(U, PSI, CHI, &
-                    TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
-
-      IF (MPI_RANK .EQ. 0) THEN
-        FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
-        START = OMP_GET_WTIME() ! OMP_LIB
+      TINFO%N = TINFO%N + 1
+      IF (TINFO%N - TINFO%NI .EQ. TINFO%TOTN) THEN
+        TINFO%T = TINFO%T + TINFO%DTF
+      ELSE
+        TINFO%T = TINFO%T + TINFO%DT
       ENDIF
 
-! ....................................................................................................... !
-
-      PSIP = PSI; CHIP = CHI; UP = U
-      CALL FLDSTEP_BOOTSTR(PSI, CHI, N=1, ORDER=2)
-      U = PT2VEL(PSI, CHI)
+      ! TIMESTEP 1 (T==DT)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi.sfld', PSI)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi.sfld', CHI)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi_unp.sfld', PSI_UNP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi_unp.sfld', CHI_UNP)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/c.sfld', C)
+      CALL MLOAD(TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/f.vfld', F)
 
       TINFO%N = TINFO%N + 1
       IF (TINFO%N - TINFO%NI .EQ. TINFO%TOTN) THEN
@@ -76,18 +81,35 @@
 
       IF (MPI_RANK .EQ. 0) THEN
         FINISH = OMP_GET_WTIME() ! OMP_LIB
-        WRITE(*,101) '1ST TIME STEP BOOTSTRAP - FLOW'//' '//REPEAT('.',48), FINISH-START
+        WRITE(*,101) 'INITIAL FIELDS LOADED'//' '//REPEAT('.',48), FINISH-START
         START = OMP_GET_WTIME() ! OMP_LIB
       ENDIF
 
 ! ....................................................................................................... !
-! ....................................................................................................... !
       DO WHILE (TINFO%N .LT. TINFO%NI+TINFO%TOTN)
 ! ....................................................................................................... !
+      PSIPP = PSIP; CHIPP = CHIP ! PSIPP == PSI AT TIMESTEP N-1, CHIPP = CHI AT TIMESTEP N-1
 
-      UP = U
-      CALL FLDSTEP_SEMIIMP(PSI=PSI, CHI=CHI, PSIP=PSIP, CHIP=CHIP, ORDER=2)
+      F%ER = F%ER*(FINFO%PTCDENS-1.D0); FP%ER = FP%ER*(FINFO%PTCDENS-1.D0)
+      F%EP = F%EP*(FINFO%PTCDENS-1.D0); FP%EP = FP%EP*(FINFO%PTCDENS-1.D0)
+      F%EZ = F%EZ*(FINFO%PTCDENS-1.D0); FP%EZ = FP%EZ*(FINFO%PTCDENS-1.D0)
+      CALL FLDSTEP_SEMIIMP(PSI, CHI, PSIP, CHIP, ORDER=2, F=F, FP=FP) ! ON EXIT, PSI = PSI AT TIMESTEP N+1, CHI = CHI AT TIMESTEP N+1 & PSIP = PSI AT TIMESTEP N, CHIP = CHI AT TIMESTEP N
+
+      F%ER = F%ER/(FINFO%PTCDENS-1.D0); FP%ER = FP%ER/(FINFO%PTCDENS-1.D0)
+      F%EP = F%EP/(FINFO%PTCDENS-1.D0); FP%EP = FP%EP/(FINFO%PTCDENS-1.D0)
+      F%EZ = F%EZ/(FINFO%PTCDENS-1.D0); FP%EZ = FP%EZ/(FINFO%PTCDENS-1.D0)
+      CALL PFLDSTEP_EXPLICIT(C, CP, PSIP, CHIP, PSIPP, CHIPP, F, FP) ! ON EXIT, C = C AT TIMESTEP N+1, CP = C AT TIMESTEP N
+
+      FP = F ! FP == F AT TIMESTEP N
+      F = PFTERM(C, PSI, CHI, PSIP, CHIP, PSIPP, CHIPP) ! CALCULATE THE NONLINEAR COUPLING FORCING AT TIMESTEP N+1
+
       U = PT2VEL(PSI, CHI)
+      W = PT2VOR(PSI, CHI)
+
+      CALL FLDSTEP_SEMIIMP(PSI_UNP, CHI_UNP, PSIP_UNP, CHIP_UNP, ORDER=2)
+
+      U_UNP = PT2VEL(PSI_UNP, CHI_UNP)
+      W_UNP = PT2VOR(PSI_UNP, CHI_UNP)
 
       TINFO%N = TINFO%N+1
       IF (TINFO%N - TINFO%NI .EQ. TINFO%TOTN) THEN
@@ -96,15 +118,37 @@
         TINFO%T = TINFO%T + TINFO%DT
       ENDIF
 
-      IF (P%ISDATSAV) THEN
-        IF (MOD(TINFO%N, P%DATSAVINTVL) .EQ. 0) THEN
-          CALL SYSTEM('mkdir -p '//TRIM(ADJUSTL(P%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))))
-          CALL MSAVE(U,   TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/u.vfld')
-          CALL MSAVE(PSI, TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/psi.sfld')
-          CALL MSAVE(CHI, TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/chi.sfld')
+      IF (PRMS%ISFFRMV) THEN
+        IF (MOD(TINFO%N, PRMS%FFRMVINTVL) .EQ. 0) THEN
+          CALL PTFFRMV(PSI=PSI, CHI=CHI)
+          CALL PTFFRMV(PSI=PSIP, CHI=CHIP)
+          CALL PTFFRMV(PSI=PSI_UNP, CHI=CHI_UNP)
+          CALL PTFFRMV(PSI=PSIP_UNP, CHI=CHIP_UNP)
+          IF (MPI_RANK .EQ. 0) THEN
+            WRITE(*,102) 'FAR-FIELD REMOVAL @ TIMESTEP # '//NTOA(TINFO%N,'(I10)')&
+                         //' '//REPEAT('.',72)
+          ENDIF
+        ENDIF
+      ENDIF
 
-          CALL OUTPUT3D(U, PSI, CHI, &
-                        TRIM(ADJUSTL(P%DATDIR)) // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))) // '/tec3d.dat')
+      IF (PRMS%ISDATSAV) THEN
+        IF (MOD(TINFO%N, PRMS%DATSAVINTVL) .EQ. 0) THEN
+          CALL SYSTEM('mkdir -p '//TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))))
+          CALL MSAVE(U,     TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/u.vfld')
+          CALL MSAVE(U_UNP,     TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/u_unp.vfld')
+          CALL MSAVE(W,     TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/w.vfld')
+          CALL MSAVE(W_UNP,     TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/w_unp.vfld')
+          CALL MSAVE(PSI,   TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi.sfld')
+          CALL MSAVE(CHI,   TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi.sfld')
+          CALL MSAVE(PSI_UNP,   TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/psi_unp.sfld')
+          CALL MSAVE(CHI_UNP,   TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/chi_unp.sfld')
+          CALL MSAVE(C,     TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/c.sfld')
+
+          CALL MSAVE(F, TRIM(ADJUSTL(PRMS%DATDIR))//TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)')))//'/f.vfld')
+
+          CALL OUTPUT3D(U, W, C, U_UNP, W_UNP, F, &
+                        TRIM(ADJUSTL(PRMS%DATDIR)) & ! // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))) &
+                        // '/tec3d_' // TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))) // '.dat')
         ENDIF
       ENDIF
 
@@ -118,7 +162,6 @@
 ! ....................................................................................................... !
       ENDDO
 ! ....................................................................................................... !
-! ....................................................................................................... !
 
       IF (MPI_RANK .EQ. 0) THEN
         WRITE(*,*) ''
@@ -129,91 +172,10 @@
       CLOSE(11)
 
  101  FORMAT(A48,1X,F13.6,' SECONDS.')
+ 102  FORMAT(A72)
 
 CONTAINS
 ! =========================================================================================================
 !  PROGRAM-DEPENDENT PROCEDRUES ===========================================================================
-! =========================================================================================================
-      SUBROUTINE OUTPUT3D(U, PSI, CHI, OUTPUTPATH)
-! =========================================================================================================
-      IMPLICIT NONE
-
-      TYPE(VECTOR_FIELD), INTENT(IN)    :: U
-      TYPE(SCALAR_FIELD), INTENT(INOUT) :: PSI, CHI
-      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
-
-      TYPE(VECTOR_FIELD)                :: O
-
-      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
-      INTEGER                           :: FU
-
-      INUM = 0; JNUM = 0; KNUM = 0
-      RSKIP = 1; PSKIP = 1; ZSKIP = 1
-
-      DO I=1,FINFO%NR,RSKIP
-        INUM=INUM+1
-      ENDDO
-      DO J=1,2*FINFO%NPH+1,PSKIP
-        JNUM=JNUM+1
-      ENDDO
-      DO K=1,FINFO%NZ+1,ZSKIP
-        KNUM=KNUM+1
-      ENDDO
-
-      O = PT2VOR(PSI, CHI)
-
-      OPEN(FU, FILE=OUTPUTPATH)
-
-      WRITE(FU,'(A110)')'variables= "x","y","z","ux","uy","uz","wx","wy","wz"'
-      WRITE(FU,*)'ZONE T="', TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.3)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
-                 ', ZONETYPE=Ordered'
-      WRITE(FU,*)'DATAPACKING=POINT'
-      DO K=1,FINFO%NZ+1,ZSKIP
-        DO J=1,2*FINFO%NPH+1,PSKIP
-          DO I=1,FINFO%NR,RSKIP
-            KK = K
-            JJ = J
-            IF (K.EQ.FINFO%NZ+1) KK = 1
-            IF (J.EQ.2*FINFO%NPH+1) JJ = 1
-            IF (MOD(J,2).EQ.1) THEN
-              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
-                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
-                            FINFO%Z(K),&
-                            REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
-                              -REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
-                            REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
-                              +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
-                            REAL(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
-                              -REAL(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
-                            REAL(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
-                              +REAL(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
-                            REAL(O%EZ(I,(JJ+1)/2,KK))
-            ELSE
-              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
-                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
-                            FINFO%Z(K),&
-                            AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
-                              -AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
-                            AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
-                              +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
-                            AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
-                            REAL(O%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
-                              -REAL(O%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
-                            REAL(O%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
-                              +REAL(O%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
-                            REAL(O%EZ(I,(JJ+1)/2,KK))
-            ENDIF
-          ENDDO
-        ENDDO
-      ENDDO
-      CLOSE(FU)
-
-      CALL DEALLOC( O )
-      
-103   FORMAT(8E23.15)
-
-      RETURN
-      END SUBROUTINE
 ! =========================================================================================================
 END PROGRAM
