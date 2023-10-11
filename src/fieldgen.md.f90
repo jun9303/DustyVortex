@@ -15,6 +15,7 @@ MODULE FIELDGEN ! MODULE FOR 3D SCALAR/VECTOR FIELD GENERATION SUBROUTINES & FUN
         INTEGER :: NR, NRH, NP, NPH, NZ, VISCPOW
         INTEGER :: NRDIM, NPDIM, NZDIM
         INTEGER :: NRCHOP, NPCHOP, NZCHOP, NZCHOPU
+        REAL(P8) :: PTCDENS, PTCRESP
         INTEGER, DIMENSION(:), ALLOCATABLE :: NRCHOPS, NPCHOPS
         INTEGER, DIMENSION(:), ALLOCATABLE :: M
         REAL(P8), DIMENSION(:), ALLOCATABLE :: AK
@@ -61,6 +62,7 @@ MODULE FIELDGEN ! MODULE FOR 3D SCALAR/VECTOR FIELD GENERATION SUBROUTINES & FUN
 
       INTERFACE FIELD_SET
         MODULE PROCEDURE FIELD_SET_VECTOR
+        MODULE PROCEDURE FIELD_SET_SCALAR
       END INTERFACE
 
       INTERFACE ALLOC
@@ -140,7 +142,8 @@ CONTAINS
 !  PUBLIC PROCEDURES =======================================================================================
 ! ==========================================================================================================
       SUBROUTINE FIELD_INIT(NRIN, NPIN, NZIN, ELLIN, ZLENIN, VISCIN,  &
-                                   NRCHOPIN, NPCHOPIN, NZCHOPIN, VISCPOW, VISCPIN)
+                            NRCHOPIN, NPCHOPIN, NZCHOPIN, VISCPOW, VISCPIN, &
+                            PTCDENSIN, PTCRESPIN)
 ! ==========================================================================================================
 ! [USAGE]:
 ! INITIALIZE THE GLOBAL FIELD (DOMAIN) SETUP, PROXYING FOU_INIT (IN FOURIER.MD) & LEG_INIT (IN LEGENDRE.MD)
@@ -156,6 +159,8 @@ CONTAINS
 ! VISCPOW >> THE HIGHEST ORDER OF (HYPER)VISCOUS TERMS TO BE CONSIDERED. DEAFULT IS 2.
 ! VISCIN >> GENERAL VISCOSITY NU.
 ! VISCPIN >> HYPERVISCOSITY (IF VISCPOW .LT. 2) NUP.
+! PTCDENSIN >> PARTICLE DENSITY DENS.
+! PTCRESPIN >> PARTICLE RESPONSE TIME RTIME.
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! ==========================================================================================================
@@ -166,11 +171,12 @@ CONTAINS
       INTEGER, OPTIONAL    :: NRCHOPIN, NPCHOPIN, NZCHOPIN
       INTEGER, OPTIONAL    :: VISCPOW
       REAL(P8), OPTIONAL   :: VISCIN, VISCPIN
+      REAL(P8), OPTIONAL   :: PTCDENSIN, PTCRESPIN
       TYPE(FOU_TRANSFORM)  :: FTF
 
       ! INTEGER              :: I, J
       INTEGER              :: NRCHOPIN_, NPCHOPIN_, NZCHOPIN_, VISCPOW_
-      REAL(P8)             :: VISCIN_, VISCPIN_
+      REAL(P8)             :: VISCIN_, VISCPIN_, PTCDENSIN_, PTCRESPIN_
 
       NRCHOPIN_ = NRIN   ! DEFAULT: CHOP. INDEX IN R = NR
       NPCHOPIN_ = NPIN/2 ! DEFAULT: CHOP. INDEX IN PHI = NPH
@@ -179,6 +185,9 @@ CONTAINS
       VISCIN_  = 0.D0    ! DEFAULT: INVISCID
       VISCPIN_ = 0.D0    ! DEFAULT: NO HYPERVISCOSITY
 
+      PTCDENSIN_ = 1.    ! DEFAULT: SAME AS REFERENCE DENSITY
+      PTCRESPIN_ = 1.    ! DEFAULT: SAME AS REFERENCE TIME
+
       IF (PRESENT(VISCPOW)) VISCPOW_ = VISCPOW
       IF (PRESENT(NRCHOPIN)) NRCHOPIN_ = NRCHOPIN
       IF (PRESENT(NPCHOPIN)) NPCHOPIN_ = NPCHOPIN
@@ -186,11 +195,17 @@ CONTAINS
       IF (PRESENT(VISCIN)) VISCIN_ = VISCIN
       IF (PRESENT(VISCPIN)) VISCPIN_ = VISCPIN
 
+      IF (PRESENT(PTCDENSIN)) PTCDENSIN_ = PTCDENSIN
+      IF (PRESENT(PTCRESPIN)) PTCRESPIN_ = PTCRESPIN
+
       IF (VISCIN_ .LT. 0.D0) STOP 'FIELD_INIT: VISCOSITY CANNOT BE NEGATIVE.'
       IF (VISCPIN_ .LT. 0.D0) STOP 'FIELD_INIT: HYPERVISCOSITY CANNOT BE NEGATIVE.'
       IF ((VISCPOW_ .GT. 2) .AND. (VISCPIN_ .LT. 1.D-15)) THEN
         STOP 'FIELD_INIT: HYPERVISCOSITY CAN`T BE ZERO WHEN HYPERVISOCISTY ORDER >=4 IS SET.'
       ENDIF
+
+      IF (PTCDENSIN_ .LT. 0.D0) STOP 'FIELD_INIT: PARTICLE DENSITY CANNOT BE NEGATIVE.'
+      IF (PTCRESPIN_ .LT. 0.D0) STOP 'FIELD_INIT: PARTICLE RESPONSE TIME CANNOT BE NEGATIVE.'
 
       FTF = FOU_INIT(NZIN, NZCHOPIN_, ZLENIN)
       TFM = LEG_INIT(NRIN, NPIN, NRCHOPIN_, NPCHOPIN_, ELLIN, VISCPOW_)
@@ -230,6 +245,9 @@ CONTAINS
       FINFO%VISC = VISCIN_
       FINFO%VISCP = VISCPIN_
 
+      FINFO%PTCDENS = PTCDENSIN_
+      FINFO%PTCRESP = PTCRESPIN_
+
       RETURN
       END SUBROUTINE
 ! =========================================================================================================
@@ -261,6 +279,84 @@ CONTAINS
           VFLD%EZ(I,J,:) = CMPLX(EXP(-RR**2.D0)/Q, EXP(-RI**2.D0)/Q, P8)
         ENDDO
       ENDDO
+
+      RETURN
+      END SUBROUTINE
+! ==========================================================================================================
+      SUBROUTINE FIELD_SET_SCALAR(SFLD, TYPE, CENTER, CL, INTENSITY)
+! ==========================================================================================================
+! [USAGE]:
+! GENERATE A PARTICLE CONCENTRATION PROFILE (IN PPP SPACE)
+! [VARAIABLES]:
+! SFLD >> SCALAR FIELD
+! TYPE >> DISTRIBUTION TYPE. 'CU/CG': CYLINDRICAL UNIF/GAUS & 'SU/SG': SPHERICAL UNIF/GAUS
+! CENTER >> CENTER OF THE PARTICLE DISTRIBUTION (X, Y, Z)
+! CL >> SCALING FACTORS
+! INTENSITY >> OVERALL CONCENTRATION INTENSITY
+! [NOTES]:
+! SANGJOON LEE @ JUNE 2023
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(SCALAR_FIELD), INTENT(INOUT)  :: SFLD
+      CHARACTER(LEN=2), INTENT(IN)       :: TYPE
+      REAL(P8), DIMENSION(3), INTENT(IN) :: CENTER
+      REAL(P8), INTENT(IN)               :: CL
+      REAL(P8), INTENT(IN)               :: INTENSITY
+
+      INTEGER                            :: I, J, K
+      REAL(P8)                           :: RR, RI, XO, YO, ZO
+
+      CALL ALLOC(SFLD, 'PPP')
+      XO = CENTER(1)
+      YO = CENTER(2)
+      ZO = CENTER(3)
+
+      IF (TYPE(1:1) .EQ. 'C') THEN
+        DO I = 1, FINFO%NR
+          DO J = 1, FINFO%NPH
+            RR = SQRT((FINFO%R(I)*COS(FINFO%PR(J))-XO)**2.D0 &
+                     +(FINFO%R(I)*SIN(FINFO%PR(J))-YO)**2.D0)
+            RI = SQRT((FINFO%R(I)*COS(FINFO%PI(J))-XO)**2.D0 &
+                     +(FINFO%R(I)*SIN(FINFO%PI(J))-YO)**2.D0)
+            IF (TYPE(2:2) .EQ. 'G') THEN
+              SFLD%E(I,J,:) = CMPLX(EXP(-(RR**2.D0)*18.D0/CL**2.D0), &
+                                    EXP(-(RI**2.D0)*18.D0/CL**2.D0), P8)
+            ELSEIF (TYPE(2:2) .EQ. 'U') THEN
+              IF (RR .LE. .5D0*CL) SFLD%E(I,J,:) = 1.D0
+              IF (RI .LE. .5D0*CL) SFLD%E(I,J,:) = SFLD%E(I,J,:) + 1.D0*IU
+            ELSE 
+              STOP 'FIELD_SET_SCALAR: INVALID TYPE SETUP, WHICH MUST BE EITHER CU/CG/SU/SG'
+            END IF
+          ENDDO
+        ENDDO
+      ELSEIF (TYPE(1:1) .EQ. 'S') THEN
+        DO I = 1, FINFO%NR
+          DO J = 1, FINFO%NPH
+            DO K = 1, FINFO%NZ
+              RR = SQRT((FINFO%R(I)*COS(FINFO%PR(J))-XO)**2.D0 &
+                       +(FINFO%R(I)*SIN(FINFO%PR(J))-YO)**2.D0 &
+                       +(FINFO%Z(K)-ZO)**2.D0)
+              RI = SQRT((FINFO%R(I)*COS(FINFO%PI(J))-XO)**2.D0 &
+                       +(FINFO%R(I)*SIN(FINFO%PI(J))-YO)**2.D0 &
+                       +(FINFO%Z(K)-ZO)**2.D0)
+              IF (TYPE(2:2) .EQ. 'G') THEN
+                SFLD%E(I,J,K) = CMPLX(EXP(-(RR**2.D0)*18.D0/CL**2.D0), &
+                                      EXP(-(RI**2.D0)*18.D0/CL**2.D0), P8)
+              ELSEIF (TYPE(2:2) .EQ. 'U') THEN
+                IF (RR .LE. .5D0*CL) SFLD%E(I,J,K) = 1.D0
+                IF (RI .LE. .5D0*CL) SFLD%E(I,J,K) = SFLD%E(I,J,K) + 1.D0*IU
+              ELSE 
+                STOP 'FIELD_SET_SCALAR: INVALID TYPE SETUP, WHICH MUST BE EITHER CU/CG/SU/SG'
+              END IF
+            ENDDO
+          ENDDO
+        ENDDO
+      ELSE
+        STOP 'FIELD_SET_SCALAR: INVALID TYPE SETUP, WHICH MUST BE EITHER CU/CG/SU/SG'
+      ENDIF
+
+      SFLD%E = INTENSITY * SFLD%E / INTEG_SCALAR(SFLD)
 
       RETURN
       END SUBROUTINE

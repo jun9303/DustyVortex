@@ -66,8 +66,7 @@ $(OBJ_DIR)/fieldstep.md.o :  \
     $(OBJ_DIR)/misc.md.o
 
 $(OBJ_DIR)/particlestep.md.o :  \
-    $(OBJ_DIR)/particleintf.md.o \
-    $(OBJ_DIR)/particlegen.md.o \
+    $(OBJ_DIR)/fieldstep.md.o \
     $(OBJ_DIR)/fieldops.md.o \
     $(OBJ_DIR)/fieldgen.md.o \
     $(OBJ_DIR)/fourier.md.o \

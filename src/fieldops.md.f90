@@ -26,8 +26,10 @@ MODULE FIELDOPS ! MODULE FOR 3D SCALAR/VECTOR FIELD OPERATION SUBROUTINES & FUNC
       PUBLIC :: PTFFRMV ! (PSI, CHI) ---> (PSI_FFRMV, CHIFFRMV) == FAR-FIELD VORTICITY IS REMOVED
       PUBLIC :: VELPROJ ! (U_R, U_P, U_Z) ---> (PSI, CHI)
       PUBLIC :: UXWPROJ ! (U_R, U_P, U_Z)  X (O_R, O_P, O_Z) ---> (PSI_UXW, CHI_UXW) == (PSIN, CHIN)
-      PUBLIC :: VEL2GRADP ! (U_R, U_P, U_Z) ---> GRAD(PRESSURE) VEC. FIELD
-      PUBLIC :: VEL2FORCE ! (U_R, U_P, U_Z) ---> -GRAD(P) + NU*VECDEL^2(U) (FLUID FORCE DENSITY VEC. FIELD)
+      PUBLIC :: DIVERG ! (U_R, U_P, U_Z) ---> DIV(U) SCALAR FIELD
+      PUBLIC :: SQH ! (U_R, U_P, U_Z) ---> |U|^2/2 SCALAR FIELD
+      PUBLIC :: GRAD ! A ---> GRAD(A) VEC. FIELD
+      PUBLIC :: GRADSQH ! (U_R, U_P, U_Z) ---> GRAD(U^2/2) VEC. FIELD
 ! ==========================================================================================================
 !  INTERFACES ==============================================================================================
 ! ==========================================================================================================
@@ -108,12 +110,20 @@ MODULE FIELDOPS ! MODULE FOR 3D SCALAR/VECTOR FIELD OPERATION SUBROUTINES & FUNC
         MODULE PROCEDURE UXWPROJ_VECTOR
       END INTERFACE
 
-      INTERFACE VEL2GRADP
-        MODULE PROCEDURE VEL2GRADP_VECTOR
+      INTERFACE DIVERG
+        MODULE PROCEDURE DIVERG_VECTOR
       END INTERFACE
 
-      INTERFACE VEL2FORCE
-        MODULE PROCEDURE VEL2FORCE_VECTOR
+      INTERFACE SQH
+        MODULE PROCEDURE SQH_VECTOR
+      END INTERFACE
+
+      INTERFACE GRAD
+        MODULE PROCEDURE GRAD_SCALAR
+      END INTERFACE
+
+      INTERFACE GRADSQH
+        MODULE PROCEDURE GRADSQH_VECTOR
       END INTERFACE
 
 CONTAINS
@@ -1276,19 +1286,6 @@ CONTAINS
         CHI = IDEL2_PROLN_SCALAR(CHI, ISTP=.TRUE.)
       ENDIF
 
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
-      DO MM = 1, FINFO%NRDIM
-        DO NN = 1, FINFO%NPDIM
-          DO KK = 1, FINFO%NZDIM
-            PSI%E(MM,NN,KK) = CMPLX(DNINT(REAL(PSI%E(MM,NN,KK))*1.D14)*1.D-14, &
-                                    DNINT(AIMAG(PSI%E(MM,NN,KK))*1.D14)*1.D-14, P8)
-            CHI%E(MM,NN,KK) = CMPLX(DNINT(REAL(CHI%E(MM,NN,KK))*1.D14)*1.D-14, &
-                                    DNINT(AIMAG(CHI%E(MM,NN,KK))*1.D14)*1.D-14, P8)
-          ENDDO
-        ENDDO
-      ENDDO
-!$OMP END PARALLEL DO
-
       CALL CHOP_DO(PSI); CALL ZEROAT1(PSI)
       CALL CHOP_DO(CHI); CALL ZEROAT1(CHI)
 
@@ -1355,154 +1352,212 @@ CONTAINS
       RETURN
       END SUBROUTINE
 ! ==========================================================================================================
-      FUNCTION VEL2GRADP_VECTOR(U,PSILN,CHILN,F) RESULT(GRADP)
+      FUNCTION DIVERG_VECTOR(U) RESULT(DIVU)
 ! ==========================================================================================================
 ! [USAGE]:
-! COMPUTE THE GRADIENT OF PRESSURE FIELD FROM A GIVEN VELOCITY FIELD U
+! COMPUTE THE DIVERGENCE OF U WHERE U IS AN INPUT VECTOR FIELD
 ! [VARIABLES]:
-! U >> A VECTOR FIELD (UR, UP, UZ) ASSUMED TO BE SOLENOIDAL (DIV(U) = 0) (IN PPP SPACE)
-! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD (IN PPP SPACE)
-! GRADP >> GRAD(P) (IN PPP SPACE)
+! U >> A VECTOR FIELD (UR, UP, UZ) (IN PPP SPACE)
+! DIVU >> DIV(U) (IN PPP SPACE)
 ! [NOTES]:
-! 1. GRAD(P) IS A POTENTIAL VECTOR FIELD AND THEREFORE TAKING ITS T-P PROJECTION RESULTS IN ZERO. IN OTHER
-! WORDS, VECLPROJ(GRAD(P)) WOULD BE ZERO. VEL2PT & VELPROJ ARE INVERSE TO EACH OTHER ONLY WHEN U HAS ONLY
-! SOLENOIDAL PART (AND NO POTENTIAL PART).
-! SANGJOON LEE @ JUNE 2023
+! SANGJOON LEE @ OCT 2023
 ! ==========================================================================================================
       IMPLICIT NONE
 
       TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
-      TYPE(VECTOR_FIELD)                :: GRADP
-      REAL(P8), OPTIONAL                :: PSILN, CHILN
-      TYPE(VECTOR_FIELD), OPTIONAL      :: F
+      TYPE(SCALAR_FIELD)                :: DIVU
 
-      TYPE(SCALAR_FIELD)                :: PSI, CHI
-      TYPE(VECTOR_FIELD)                :: GRADUSQH, UXW, UXWSOL
+      TYPE(SCALAR_FIELD)                :: UR, UP, UZ, W
+      INTEGER                           :: NN, MM, KK, MV
+      REAL(P8)                          :: KV
 
-      CALL ALLOC(GRADP, 'PPP')
+      CALL ALLOC(DIVU, 'PPP')
 
-      GRADUSQH = GRADUSQH_VECTOR(U)
+      CALL ALLOC(UR, 'PPP')
+      UR%E = U%ER
+      CALL ALLOC(UP, 'PPP')
+      UP%E = U%EP
+      CALL ALLOC(UZ, 'PPP')
+      UZ%E = U%EZ
 
-      IF (PRESENT(PSILN)) THEN
-        IF (PRESENT(CHILN)) THEN
-          CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN,CHILN=CHILN)
-        ELSE
-          CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN)
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
+      DO MM = 1, FINFO%NPH
+        DO KK = 1, FINFO%NZ
+          DIVU%E(:FINFO%NR,MM,KK) = UR%E(:FINFO%NR,MM,KK) / FINFO%R ! UR/R
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      CALL TRANS(UR, 'FFF')
+
+      CALL ALLOC(W, 'FFF')
+      W = XXDX_SCALAR(UR) ! R*D/DR(UR)
+      CALL TRANS(W, 'PPP')
+
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
+      DO MM = 1, FINFO%NPH
+        DO KK = 1, FINFO%NZ
+          DIVU%E(:FINFO%NR,MM,KK) = DIVU%E(:FINFO%NR,MM,KK) + W%E(:FINFO%NR,MM,KK) / FINFO%R ! D/DR(UR)
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      CALL ALLOC(W, 'FFF')
+      W%E = 0.D0
+      DO MM = 1, UP%NPC
+        MV = FINFO%M(MM)
+        W%E(:,MM,:) = UP%E(:,MM,:)*IU*MV ! D/DP(A)
+      ENDDO
+      CALL TRANS(W, 'PPP')
+
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
+      DO MM = 1, FINFO%NPH
+        DO KK = 1, FINFO%NZ
+          DIVU%E(:FINFO%NR,MM,KK) = DIVU%E(:FINFO%NR,MM,KK) + W%E(:FINFO%NR,MM,KK) / FINFO%R ! 1/R*D/DR(UP)
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      CALL ALLOC(W, 'FFF')
+      W%E = 0.D0
+      DO KK = 1, FINFO%NZ
+        IF ((KK .LE. UZ%NZC) .OR. (KK .GE. UZ%NZCU)) THEN
+          KV = FINFO%AK(KK)
+          W%E(:,:,KK) = UZ%E(:,:,KK)*IU*KV ! D/DZ(A)
         ENDIF
-      ELSE
-        IF (PRESENT(CHILN)) THEN
-          CALL VELPROJ_VECTOR(U,PSI,CHI,CHILN=CHILN)
-        ELSE
-          CALL VELPROJ_VECTOR(U,PSI,CHI)
-        ENDIF
-      ENDIF
-      UXW = PT2VOR_SCALAR_SCALAR(PSI, CHI) ! UXW NOW CONTAINS CURL(U)
-      UXW = VPROD_VECTOR_VECTOR(U, UXW)    ! UXW NOW CONTAINS U X CURL(U)
+      ENDDO
+      CALL TRANS(W, 'PPP')
 
-      CALL VELPROJ_VECTOR(UXW,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
-      UXWSOL = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! UXWSOL IS THE SOLENOIDAL PORTION OF U X W. (IN PPP SPACE)
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
+      DO MM = 1, FINFO%NPH
+        DO KK = 1, FINFO%NZ
+          DIVU%E(:FINFO%NR,MM,KK) = DIVU%E(:FINFO%NR,MM,KK) + W%E(:FINFO%NR,MM,KK) ! D/DZ(UZ)
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
 
-      GRADP%ER =  - GRADUSQH%ER + UXW%ER - UXWSOL%ER
-      GRADP%EP =  - GRADUSQH%EP + UXW%EP - UXWSOL%EP
-      GRADP%EZ =  - GRADUSQH%EZ + UXW%EZ - UXWSOL%EZ
-
-      IF (PRESENT(F)) THEN
-        CALL VELPROJ_VECTOR(F,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
-        UXWSOL = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! UXWSOL IS THE SOLENOIDAL PORTION OF F. (IN PPP SPACE)
-
-        GRADP%ER = GRADP%ER + F%ER - UXWSOL%ER
-        GRADP%EP = GRADP%EP + F%EP - UXWSOL%EP
-        GRADP%EZ = GRADP%EZ + F%EZ - UXWSOL%EZ
-      ENDIF
-
-      CALL DEALLOC( PSI )
-      CALL DEALLOC( CHI )
-      CALL DEALLOC( GRADUSQH )
-      CALL DEALLOC( UXW )
-      CALL DEALLOC( UXWSOL )
+      CALL DEALLOC( W )
+      CALL DEALLOC( UR )
+      CALL DEALLOC( UP )
+      CALL DEALLOC( UZ )
 
       RETURN
       END FUNCTION
 ! ==========================================================================================================
-      FUNCTION VEL2FORCE_VECTOR(U,PSILN,CHILN,F) RESULT(FORCE)
+      FUNCTION SQH_VECTOR(U) RESULT(USQH)
 ! ==========================================================================================================
 ! [USAGE]:
-! COMPUTE THE FORCE DENSITY FIELD FROM A GIVEN VELOCITY FIELD U
+! COMPUTE |U|^2/2 WHERE U IS AN INPUT VECTOR FIELD
 ! [VARIABLES]:
-! U >> A VECTOR FIELD (UR, UP, UZ) ASSUMED TO BE SOLENOIDAL (DIV(U) = 0) (IN PPP SPACE)
-! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD (IN PPP SPACE)
-! FORCE >> DIV(STRESS_TENSOR) = -GRAD(P) + NU*DEL2(U) (IN PPP SPACE)
+! U >> A VECTOR FIELD (UR, UP, UZ) (IN PPP SPACE)
+! USQH >> |U|^2/2 (IN PPP SPACE)
+! [NOTES]:
+! SANGJOON LEE @ OCT 2023
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
+      TYPE(SCALAR_FIELD)                :: USQH
+
+      INTEGER                           :: NN, MM, KK
+      REAL(P8)                          :: R, I
+
+      CALL ALLOC(USQH, 'PPP')
+
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK, R, I)
+      DO NN = 1, FINFO%NR
+        DO MM = 1, FINFO%NPH
+          DO KK = 1, FINFO%NZ
+            R = REAL(U%ER(NN,MM,KK))**2.D0+REAL(U%EP(NN,MM,KK))**2.D0+REAL(U%EZ(NN,MM,KK))**2.D0
+            I = AIMAG(U%ER(NN,MM,KK))**2.D0+AIMAG(U%EP(NN,MM,KK))**2.D0+AIMAG(U%EZ(NN,MM,KK))**2.D0
+            USQH%E(NN,MM,KK) = CMPLX(R, I, P8) / 2.D0
+          ENDDO
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      RETURN
+      END FUNCTION
+! ==========================================================================================================
+      FUNCTION GRAD_SCALAR(A) RESULT(GRADA)
+! ==========================================================================================================
+! [USAGE]:
+! COMPUTE GRAD(A) WHERE A IS AN INPUT SCALAR FIELD
+! [VARIABLES]:
+! A >> A SCALAR FIELD (IN PPP SPACE)
+! GRADA >> GRAD(A) = (D/DR, 1/R*D/DPHI, D/DZ) (IN PPP SPACE)
+! [NOTES]:
+! SANGJOON LEE @ OCT 2023
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: A
+      TYPE(VECTOR_FIELD)                :: GRADA
+
+      TYPE(SCALAR_FIELD)                :: AT, W
+      INTEGER                           :: NN, MM, KK, MV
+      REAL(P8)                          :: KV
+
+      AT = A
+      CALL TRANS(AT, 'FFF')
+      CALL ALLOC(GRADA, 'FFF')
+
+      W = XXDX_SCALAR(AT) ! R*D/DR(A)
+      GRADA%ER = W%E
+
+      W%E = 0.D0
+      DO MM = 1, AT%NPC
+        MV = FINFO%M(MM)
+        W%E(:,MM,:) = AT%E(:,MM,:)*IU*MV ! D/DP(A)
+      ENDDO
+      GRADA%EP = W%E
+
+      W%E = 0.D0
+      DO KK = 1, FINFO%NZ
+        IF ((KK .LE. AT%NZC) .OR. (KK .GE. AT%NZCU)) THEN
+          KV = FINFO%AK(KK)
+          W%E(:,:,KK) = AT%E(:,:,KK)*IU*KV ! D/DZ(A)
+        ENDIF
+      ENDDO
+      GRADA%EZ = W%E
+
+      CALL TRANS(GRADA, 'PPP')
+
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
+      DO MM = 1, FINFO%NPH
+        DO KK = 1, FINFO%NZ
+          GRADA%ER(:FINFO%NR,MM,KK) = GRADA%ER(:FINFO%NR,MM,KK) / FINFO%R
+          GRADA%EP(:FINFO%NR,MM,KK) = GRADA%EP(:FINFO%NR,MM,KK) / FINFO%R
+        ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      CALL DEALLOC( W )
+
+      RETURN
+      END FUNCTION
+! ==========================================================================================================
+      FUNCTION GRADSQH_VECTOR(U) RESULT(GRADUSQH)
+! ==========================================================================================================
+! [USAGE]:
+! COMPUTE GRAD(U^2/2) WHERE U IS AN INPUT VECTOR FIELD
+! [VARIABLES]:
+! U >> A VECTOR FIELD (UR, UP, UZ) (IN PPP SPACE)
+! GRADUSQH >> GRAD(U^2/2) (IN PPP SPACE)
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! ==========================================================================================================
       IMPLICIT NONE
 
       TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
-      TYPE(VECTOR_FIELD)                :: FORCE
-      REAL(P8), OPTIONAL                :: PSILN, CHILN
-      TYPE(VECTOR_FIELD), OPTIONAL      :: F
+      TYPE(VECTOR_FIELD)                :: GRADUSQH
 
-      TYPE(SCALAR_FIELD)                :: PSI, CHI
-      TYPE(VECTOR_FIELD)                :: GRADP, DEL2U
+      TYPE(SCALAR_FIELD)                :: USQH
 
-      CALL ALLOC(FORCE, 'PPP')
+      USQH = SQH_VECTOR(U)
+      GRADUSQH = GRAD_SCALAR(USQH)
 
-      IF (PRESENT(PSILN)) THEN
-        IF (PRESENT(CHILN)) THEN
-          IF (PRESENT(F)) THEN
-            GRADP = VEL2GRADP_VECTOR(U, PSILN=PSILN, CHILN=CHILN, F=F)
-          ELSE
-            GRADP = VEL2GRADP_VECTOR(U, PSILN=PSILN, CHILN=CHILN)
-          ENDIF
-        ELSE
-          IF (PRESENT(F)) THEN
-            GRADP = VEL2GRADP_VECTOR(U, PSILN=PSILN, F=F)
-          ELSE
-            GRADP = VEL2GRADP_VECTOR(U, PSILN=PSILN)
-          ENDIF
-        ENDIF
-      ELSE
-        IF (PRESENT(CHILN)) THEN
-          IF (PRESENT(F)) THEN
-            GRADP = VEL2GRADP_VECTOR(U, CHILN=CHILN, F=F)
-          ELSE
-            GRADP = VEL2GRADP_VECTOR(U, CHILN=CHILN)
-          ENDIF
-        ELSE
-          IF (PRESENT(F)) THEN
-            GRADP = VEL2GRADP_VECTOR(U, F=F)
-          ELSE
-            GRADP = VEL2GRADP_VECTOR(U)
-          ENDIF
-        ENDIF
-      ENDIF
-
-      IF (PRESENT(PSILN)) THEN
-        IF (PRESENT(CHILN)) THEN
-          CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN,CHILN=CHILN)
-        ELSE
-          CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN)
-        ENDIF
-      ELSE
-        IF (PRESENT(CHILN)) THEN
-          CALL VELPROJ_VECTOR(U,PSI,CHI,CHILN=CHILN)
-        ELSE
-          CALL VELPROJ_VECTOR(U,PSI,CHI)
-        ENDIF
-      ENDIF
-
-      PSI = DEL2_SCALAR(PSI) ! PSI NOW CONTAINS DEL2(PSI_U)
-      CHI = DEL2_SCALAR(CHI) ! CHI NOW CONTAINS DEL2(CHI_U)
-      DEL2U = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! DEL2U=PROJ(DEL2(PSI_U),DEL2(CHI_U))=DEL2(PROJ(PSI_U,CHI_U))
-
-      FORCE%ER = FINFO%VISC*DEL2U%ER - GRADP%ER
-      FORCE%EP = FINFO%VISC*DEL2U%EP - GRADP%EP
-      FORCE%EZ = FINFO%VISC*DEL2U%EZ - GRADP%EZ
-
-      CALL DEALLOC( PSI )
-      CALL DEALLOC( CHI )
-      CALL DEALLOC( GRADP )
-      CALL DEALLOC( DEL2U )
+      CALL DEALLOC( USQH )
 
       RETURN
       END FUNCTION
@@ -1687,75 +1742,6 @@ CONTAINS
       RETURN
       END SUBROUTINE
 ! ==========================================================================================================
-      FUNCTION GRADUSQH_VECTOR(U) RESULT(GRADUSQH)
-! ==========================================================================================================
-! [USAGE]:
-! COMPUTE GRAD(U^2/2) WHERE U IS AN INPUT VECTOR FIELD
-! [VARIABLES]:
-! U >> A VECTOR FIELD (UR, UP, UZ) (IN PPP SPACE)
-! GRADUSQH >> GRAD(U^2/2) (IN PPP SPACE)
-! [NOTES]:
-! SANGJOON LEE @ JUNE 2023
-! ==========================================================================================================
-      IMPLICIT NONE
-
-      TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
-      TYPE(VECTOR_FIELD)                :: GRADUSQH
-
-      TYPE(SCALAR_FIELD)                :: USQH, W
-      INTEGER                           :: NN, MM, KK, MV
-      REAL(P8)                          :: R, I, KV
-
-      CALL ALLOC(USQH, 'PPP')
-
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK, R, I)
-      DO NN = 1, FINFO%NR
-        DO MM = 1, FINFO%NPH
-          DO KK = 1, FINFO%NZ
-            R = REAL(U%ER(NN,MM,KK))**2.D0+REAL(U%EP(NN,MM,KK))**2.D0+REAL(U%EZ(NN,MM,KK))**2.D0
-            I = AIMAG(U%ER(NN,MM,KK))**2.D0+AIMAG(U%EP(NN,MM,KK))**2.D0+AIMAG(U%EZ(NN,MM,KK))**2.D0
-            USQH%E(NN,MM,KK) = CMPLX(R, I, P8) / 2.D0
-          ENDDO
-        ENDDO
-      ENDDO
-!$OMP END PARALLEL DO
-
-      CALL TRANS(USQH, 'FFF')
-      CALL ALLOC(GRADUSQH, 'FFF')
-
-      W = XXDX_SCALAR(USQH) ! R*D/DR(USQH)
-      GRADUSQH%ER = W%E
-
-      W%E = 0.D0
-      DO MM = 1, USQH%NPC
-        MV = FINFO%M(MM)
-        W%E(:,MM,:) = USQH%E(:,MM,:)*IU*MV ! D/DP(USQH)
-      ENDDO
-      GRADUSQH%EP = W%E
-
-      W%E = 0.D0
-      DO KK = 1, FINFO%NZ
-        IF ((KK .LE. USQH%NZC) .OR. (KK .GE. USQH%NZCU)) THEN
-          KV = FINFO%AK(KK)
-          W%E(:,:,KK) = USQH%E(:,:,KK)*IU*KV ! D/DZ(USQH)
-        ENDIF
-      ENDDO
-      GRADUSQH%EZ = W%E
-
-      CALL TRANS(GRADUSQH, 'PPP')
-
-!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, KK)
-      DO MM = 1, FINFO%NPH
-        DO KK = 1, FINFO%NZ
-          GRADUSQH%ER(:FINFO%NR,MM,KK) = GRADUSQH%ER(:FINFO%NR,MM,KK) / FINFO%R
-          GRADUSQH%EP(:FINFO%NR,MM,KK) = GRADUSQH%EP(:FINFO%NR,MM,KK) / FINFO%R
-        ENDDO
-      ENDDO
-!$OMP END PARALLEL DO
-
-      RETURN
-      END FUNCTION
-! ==========================================================================================================
       FUNCTION SMOOTH(A) RESULT(AS)
 ! ==========================================================================================================
 ! [USAGE]:
@@ -1794,3 +1780,386 @@ CONTAINS
       END FUNCTION
 ! ==========================================================================================================
 END MODULE
+
+! ==========================================================================================================
+!       FUNCTION VEL2GRADP_VECTOR(U,ITER,EPS,PSILN,CHILN,C,GRADP_INIT,SILENCE) RESULT(GRADP)
+! ! ==========================================================================================================
+! ! [USAGE]:
+! ! COMPUTE THE GRADIENT OF PRESSURE FIELD FROM A GIVEN VELOCITY FIELD U
+! ! [VARIABLES]:
+! ! U >> A VECTOR FIELD (UR, UP, UZ) ASSUMED TO BE SOLENOIDAL (DIV(U) = 0) (IN PPP SPACE)
+! ! C >> (OPTIONAL) A PARTICLE CONCENTRATION SCALAR (IN PPP SPACE). DEFAULT IS 0.
+! ! GRADP >> GRAD(P) (IN PPP SPACE)
+! ! [NOTES]:
+! ! 1. GRAD(P) IS A POTENTIAL VECTOR FIELD AND THEREFORE TAKING ITS T-P PROJECTION RESULTS IN ZERO. IN OTHER
+! ! WORDS, VECLPROJ(GRAD(P)) WOULD BE ZERO. VEL2PT & VELPROJ ARE INVERSE TO EACH OTHER ONLY WHEN U HAS ONLY
+! ! SOLENOIDAL PART (AND NO POTENTIAL PART).
+! ! SANGJOON LEE @ JUNE 2023
+! ! ==========================================================================================================
+!       IMPLICIT NONE
+
+!       TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
+!       TYPE(VECTOR_FIELD)                :: GRADP
+!       REAL(P8), OPTIONAL                :: PSILN, CHILN
+!       TYPE(SCALAR_FIELD), OPTIONAL      :: C
+!       TYPE(VECTOR_FIELD), OPTIONAL      :: GRADP_INIT
+!       LOGICAL, OPTIONAL                 :: SILENCE
+
+!       INTEGER                           :: NN, MM, KK
+!       INTEGER                           :: I, ITER
+!       REAL(P8)                          :: EPSP, EPSC, EPS, F, FF, FFF
+!       TYPE(SCALAR_FIELD)                :: PSI, CHI, C_, E, PSIG, CHIG
+!       TYPE(VECTOR_FIELD)                :: GRADUSQH, DELSQUC, DELSQUCSOL, UXW, UXWSOL
+!       TYPE(VECTOR_FIELD)                :: X, XX, XXX, DUM
+!       LOGICAL                           :: SILENCE_ = .FALSE.
+
+!       IF (PRESENT(SILENCE)) SILENCE_ = SILENCE
+
+!       CALL ALLOC(C_, 'PPP')
+!       IF (PRESENT(C)) C_ = C
+
+!       CALL ALLOC(GRADP, 'PPP')
+      
+!       GRADUSQH = GRADSQH_VECTOR(U)
+
+!       IF (PRESENT(PSILN)) THEN
+!         IF (PRESENT(CHILN)) THEN
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN,CHILN=CHILN)
+!         ELSE
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN)
+!         ENDIF
+!       ELSE
+!         IF (PRESENT(CHILN)) THEN
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,CHILN=CHILN)
+!         ELSE
+!           CALL VELPROJ_VECTOR(U,PSI,CHI)
+!         ENDIF
+!       ENDIF
+!       UXW = PT2VOR_SCALAR_SCALAR(PSI, CHI) ! UXW NOW CONTAINS CURL(U)
+!       UXW = VPROD_VECTOR_VECTOR(U, UXW)    ! UXW NOW CONTAINS U X CURL(U)
+
+!       PSI = DEL2(PSI) ! PSI NOW CONTAINS DEL^2(PSI)
+!       CHI = DEL2(CHI) ! CHI NOW CONTAINS DEL^2(CHI)
+!       DELSQUC = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! DELSQUC IS NOW DEL^2(U)
+
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             DELSQUC%ER(NN,MM,KK) = REAL(DELSQUC%ER(NN,MM,KK))  &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*REAL(C_%E(NN,MM,KK))) &
+!                                    + AIMAG(DELSQUC%ER(NN,MM,KK)) &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*AIMAG(C_%E(NN,MM,KK)))*IU
+!             DELSQUC%EP(NN,MM,KK) = REAL(DELSQUC%EP(NN,MM,KK))  &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*REAL(C_%E(NN,MM,KK))) &
+!                                    + AIMAG(DELSQUC%EP(NN,MM,KK)) &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*AIMAG(C_%E(NN,MM,KK)))*IU
+!             DELSQUC%EZ(NN,MM,KK) = REAL(DELSQUC%EZ(NN,MM,KK))  &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*REAL(C_%E(NN,MM,KK))) &
+!                                    + AIMAG(DELSQUC%EZ(NN,MM,KK)) &
+!                                    /(1.D0+(FINFO%PTCDENS-1.D0)*AIMAG(C_%E(NN,MM,KK)))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO  ! DELSQUC IS NOW DEL^2(U)/(1+(DENS-1)*C)
+! !$OMP END PARALLEL DO
+
+!       CALL VELPROJ_VECTOR(UXW,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
+!       UXWSOL = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! UXWSOL IS THE SOLENOIDAL PORTION OF U X W. (IN PPP SPACE)
+
+!       CALL VELPROJ_VECTOR(DELSQUC,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
+!       DELSQUCSOL = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! DELSQUCSOL IS THE SOLENOIDAL PORTION OF DEL^2(U)/(1+(DENS-1)*C). (IN PPP SPACE)
+
+!       GRADP%ER = (UXW%ER-UXWSOL%ER) + FINFO%VISC*(DELSQUC%ER-DELSQUCSOL%ER) - GRADUSQH%ER
+!       GRADP%EP = (UXW%EP-UXWSOL%EP) + FINFO%VISC*(DELSQUC%EP-DELSQUCSOL%EP) - GRADUSQH%EP
+!       GRADP%EZ = (UXW%EZ-UXWSOL%EZ) + FINFO%VISC*(DELSQUC%EZ-DELSQUCSOL%EZ) - GRADUSQH%EZ
+
+!       CALL ALLOC( E, 'PPP' )
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             E%E(NN,MM,KK) = (1.D0+(FINFO%PTCDENS-1.D0)*REAL(C_%E(NN,MM,KK))) &
+!                             + (1.D0+(FINFO%PTCDENS-1.D0)*AIMAG(C_%E(NN,MM,KK)))*IU
+
+!             GRADP%ER(NN,MM,KK) = REAL(GRADP%ER(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                                + AIMAG(GRADP%ER(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             GRADP%EP(NN,MM,KK) = REAL(GRADP%EP(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                                + AIMAG(GRADP%EP(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             GRADP%EZ(NN,MM,KK) = REAL(GRADP%EZ(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                                + AIMAG(GRADP%EZ(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO
+! !$OMP END PARALLEL DO
+!       CALL VELPROJ_VECTOR(GRADP, PSIG, CHIG, PSILN=0.D0, CHILN=0.D0)
+      
+!       CALL ALLOC( X, 'PPP' )   ! ALLOCATED FOR THE SECANT METHOD
+!       CALL ALLOC( XX, 'PPP' )  ! ALLOCATED FOR THE SECANT METHOD
+!       CALL ALLOC( XXX, 'PPP' ) ! ALLOCATED FOR THE SECANT METHOD
+
+! ! -------------------------------------------------------------------------------------------------------- !
+
+!       IF(PRESENT(GRADP_INIT)) THEN
+!         X%ER = X%ER - GRADP%ER
+!         X%EP = X%EP - GRADP%EP
+!         X%EZ = X%EZ - GRADP%EZ
+!       ELSE
+!         X%ER = 0.D0
+!         X%EP = 0.D0
+!         X%EZ = 0.D0
+!       ENDIF
+
+!       CALL VELPROJ_VECTOR(X,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
+!       DUM = PT2VEL_SCALAR_SCALAR(PSI, CHI)
+!       X%ER = X%ER - DUM%ER
+!       X%EP = X%EP - DUM%EP
+!       X%EZ = X%EZ - DUM%EZ
+!       ! FIRST ESTIMATE
+
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             X%ER(NN,MM,KK) = REAL(X%ER(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(X%ER(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             X%EP(NN,MM,KK) = REAL(X%EP(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(X%EP(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             X%EZ(NN,MM,KK) = REAL(X%EZ(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(X%EZ(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO
+! !$OMP END PARALLEL DO
+!       CALL VELPROJ_VECTOR(X, PSI, CHI, PSILN=0.D0, CHILN=0.D0)
+!       PSI%E = PSI%E + PSIG%E
+!       CHI%E = CHI%E + CHIG%E
+
+!       I = 0
+!       EPSP = MAX(MAXVAL(ABS(REAL(PSI%E))), MAXVAL(ABS(AIMAG(PSI%E))))
+!       EPSC = MAX(MAXVAL(ABS(REAL(CHI%E))), MAXVAL(ABS(AIMAG(CHI%E))))
+!       IF (SILENCE_ .EQ. .FALSE.) WRITE(*,103) I, EPSP, EPSC
+
+!       F = (EPSP**2.D0+EPSC**2.D0)**.5D0
+!       IF ( (EPSP .LE. EPS) .AND. (EPSC .LE. EPS) ) THEN
+!         GRADP%ER = GRADP%ER + X%ER
+!         GRADP%EP = GRADP%EP + X%EP
+!         GRADP%EZ = GRADP%EZ + X%EZ
+!         RETURN
+!       ENDIF
+
+!       CALL TRANS(PSI, 'PPP'); CALL TRANS(CHI, 'PPP')
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             PSI%E(NN,MM,KK) = -REAL(PSI%E(NN,MM,KK))/REAL(E%E(NN,MM,KK)) &
+!                             - AIMAG(CHI%E(NN,MM,KK))/AIMAG(E%E(NN,MM,KK))*IU
+!             CHI%E(NN,MM,KK) = -REAL(X%EP(NN,MM,KK))/REAL(E%E(NN,MM,KK)) &
+!                             - AIMAG(X%EP(NN,MM,KK))/AIMAG(E%E(NN,MM,KK))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO
+! !$OMP END PARALLEL DO
+!       CALL TRANS(PSI, 'FFF'); CALL TRANS(CHI, 'FFF')
+
+!       XX = PT2VEL(PSI, CHI)
+!       ! SECOND ESTIMATE
+
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             XX%ER(NN,MM,KK) = REAL(XX%ER(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(XX%ER(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             XX%EP(NN,MM,KK) = REAL(XX%EP(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(XX%EP(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             XX%EZ(NN,MM,KK) = REAL(XX%EZ(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                             + AIMAG(XX%EZ(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO
+! !$OMP END PARALLEL DO
+!       CALL VELPROJ_VECTOR(XX, PSI, CHI, PSILN=0.D0, CHILN=0.D0)
+!       PSI%E = PSI%E + PSIG%E
+!       CHI%E = CHI%E + CHIG%E
+
+!       I = I+1
+!       EPSP = MAX(MAXVAL(ABS(REAL(PSI%E))), MAXVAL(ABS(AIMAG(PSI%E))))
+!       EPSC = MAX(MAXVAL(ABS(REAL(CHI%E))), MAXVAL(ABS(AIMAG(CHI%E))))
+!       IF (SILENCE_ .EQ. .FALSE.) WRITE(*,103) I, EPSP, EPSC
+
+!       FF = (EPSP**2.D0+EPSC**2.D0)**.5D0
+!       IF ( (EPSP .LE. EPS) .AND. (EPSC .LE. EPS) ) THEN
+!         GRADP%ER = GRADP%ER + XX%ER
+!         GRADP%EP = GRADP%EP + XX%EP
+!         GRADP%EZ = GRADP%EZ + XX%EZ
+!         RETURN
+!       ENDIF
+
+! ! -------------------------------------------------------------------------------------------------------- !
+!       ! BEGIN THE SECANT METHOD
+
+!       DO WHILE (I .LT. ITER)
+
+!       CALL TRANS(PSI, 'PPP'); CALL TRANS(CHI, 'PPP')
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!       DO NN = 1, FINFO%NR
+!         DO MM = 1, FINFO%NPH
+!           DO KK = 1, FINFO%NZ
+!             PSI%E(NN,MM,KK) = -REAL(PSI%E(NN,MM,KK))/REAL(E%E(NN,MM,KK)) &
+!                             - AIMAG(CHI%E(NN,MM,KK))/AIMAG(E%E(NN,MM,KK))*IU
+!             CHI%E(NN,MM,KK) = -REAL(X%EP(NN,MM,KK))/REAL(E%E(NN,MM,KK)) &
+!                             - AIMAG(X%EP(NN,MM,KK))/AIMAG(E%E(NN,MM,KK))*IU
+!           ENDDO
+!         ENDDO
+!       ENDDO
+! !$OMP END PARALLEL DO
+!       CALL TRANS(PSI, 'FFF'); CALL TRANS(CHI, 'FFF')
+
+!       XXX = PT2VEL(PSI, CHI)
+
+!         ! XXX = XX
+!         ! IF ( (ABS(FF) .GT. EPS) .AND. (ABS(FF-F) .GT. 1.D-15) ) THEN
+!         !   XXX%ER = XX%ER+.1*FF*(XX%ER-X%ER)/(FF-F)
+!         !   XXX%EP = XX%EP+.1*FF*(XX%EP-X%EP)/(FF-F)
+!         !   XXX%EZ = XX%EZ+.1*FF*(XX%EZ-X%EZ)/(FF-F)
+!         ! ENDIF
+!         ! CALL VELPROJ_VECTOR(XXX,PSI,CHI,PSILN=0.D0,CHILN=0.D0)
+!         ! DUM = PT2VEL_SCALAR_SCALAR(PSI, CHI)
+!         ! XXX%ER = XXX%ER - DUM%ER
+!         ! XXX%EP = XXX%EP - DUM%EP
+!         ! XXX%EZ = XXX%EZ - DUM%EZ
+!         ! SECANT ESTIMATE
+
+! !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(MM, NN, KK)
+!         DO NN = 1, FINFO%NR
+!           DO MM = 1, FINFO%NPH
+!             DO KK = 1, FINFO%NZ
+!               XXX%ER(NN,MM,KK) = REAL(XXX%ER(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                               + AIMAG(XXX%ER(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!               XXX%EP(NN,MM,KK) = REAL(XXX%EP(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                               + AIMAG(XXX%EP(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!               XXX%EZ(NN,MM,KK) = REAL(XXX%EZ(NN,MM,KK))*REAL(E%E(NN,MM,KK)) &
+!                               + AIMAG(XXX%EZ(NN,MM,KK))*AIMAG(E%E(NN,MM,KK))*IU
+!             ENDDO
+!           ENDDO
+!         ENDDO
+! !$OMP END PARALLEL DO
+!         CALL VELPROJ_VECTOR(XXX, PSI, CHI, PSILN=0.D0, CHILN=0.D0)
+!         PSI%E = PSI%E + PSIG%E
+!         CHI%E = CHI%E + CHIG%E
+
+!         I = I+1
+!         EPSP = MAX(MAXVAL(ABS(REAL(PSI%E))), MAXVAL(ABS(AIMAG(PSI%E))))
+!         EPSC = MAX(MAXVAL(ABS(REAL(CHI%E))), MAXVAL(ABS(AIMAG(CHI%E))))
+!         IF (SILENCE_ .EQ. .FALSE.) WRITE(*,103) I, EPSP, EPSC
+!         FFF = (EPSP**2.D0+EPSC**2.D0)**.5D0
+
+!         IF (((EPSP .LE. EPS) .AND. (EPSC .LE. EPS)) .OR. &
+!            ((MAX(MAXVAL(ABS(REAL((XXX%ER-XX%ER)))), MAXVAL(ABS(AIMAG((XXX%ER-XX%ER))))) .LE. 1.D-10) .AND. &
+!             (MAX(MAXVAL(ABS(REAL((XXX%EP-XX%EP)))), MAXVAL(ABS(AIMAG((XXX%EP-XX%EP))))) .LE. 1.D-10) .AND. &
+!             (MAX(MAXVAL(ABS(REAL((XXX%EZ-XX%EZ)))), MAXVAL(ABS(AIMAG((XXX%EZ-XX%EZ))))) .LE. 1.D-10))) THEN
+!             GRADP%ER = GRADP%ER + XXX%ER
+!             GRADP%EP = GRADP%EP + XXX%EP
+!             GRADP%EZ = GRADP%EZ + XXX%EZ
+!           EXIT
+!         ENDIF
+
+!         X = XX
+!         XX = XXX
+!         F = FF
+!         FF = FFF
+
+!       ENDDO
+! ! -------------------------------------------------------------------------------------------------------- !
+!  103  FORMAT('PRESSURE COMPUTATION ITER. #'I03,': EPSP=',E10.3,', EPSC=',E10.3)
+
+!       CALL DEALLOC( PSI )
+!       CALL DEALLOC( CHI )
+!       CALL DEALLOC( PSIG )
+!       CALL DEALLOC( CHIG )
+!       CALL DEALLOC( C_ )
+!       CALL DEALLOC( GRADUSQH )
+!       CALL DEALLOC( DELSQUC )
+!       CALL DEALLOC( DELSQUCSOL )
+!       CALL DEALLOC( UXW )
+!       CALL DEALLOC( UXWSOL )
+
+!       CALL DEALLOC( X )
+!       CALL DEALLOC( XX )
+!       CALL DEALLOC( XXX )
+!       CALL DEALLOC( DUM )
+
+!       CALL DEALLOC( E )
+
+!       RETURN
+!       END FUNCTION
+! ! ==========================================================================================================
+!       FUNCTION VEL2FORCE_VECTOR(U,ITER,EPS,PSILN,CHILN) RESULT(FORCE)
+! ! ==========================================================================================================
+! ! [USAGE]:
+! ! COMPUTE THE FORCE DENSITY FIELD FROM A GIVEN VELOCITY FIELD U
+! ! [VARIABLES]:
+! ! U >> A VECTOR FIELD (UR, UP, UZ) ASSUMED TO BE SOLENOIDAL (DIV(U) = 0) (IN PPP SPACE)
+! ! FORCE >> DIV(STRESS_TENSOR) = -GRAD(P) + NU*DEL2(U) (IN PPP SPACE)
+! ! [NOTES]:
+! ! SANGJOON LEE @ JUNE 2023
+! ! ==========================================================================================================
+!       IMPLICIT NONE
+
+!       TYPE(VECTOR_FIELD), INTENT(INOUT) :: U
+!       TYPE(VECTOR_FIELD)                :: FORCE
+!       REAL(P8), OPTIONAL                :: PSILN, CHILN
+
+!       INTEGER                           :: ITER
+!       REAL(P8)                          :: EPS
+
+!       TYPE(SCALAR_FIELD)                :: PSI, CHI
+!       TYPE(VECTOR_FIELD)                :: GRADP, DEL2U
+
+!       CALL ALLOC(FORCE, 'PPP')
+
+!       IF (PRESENT(PSILN)) THEN
+!         IF (PRESENT(CHILN)) THEN
+!           GRADP = VEL2GRADP_VECTOR(U,ITER,EPS,PSILN=PSILN,CHILN=CHILN)
+!         ELSE
+!           GRADP = VEL2GRADP_VECTOR(U,ITER,EPS,PSILN=PSILN)
+!         ENDIF
+!       ELSE
+!         IF (PRESENT(CHILN)) THEN
+!           GRADP = VEL2GRADP_VECTOR(U,ITER,EPS,CHILN=CHILN)
+!         ELSE
+!           GRADP = VEL2GRADP_VECTOR(U,ITER,EPS)
+!         ENDIF
+!       ENDIF
+
+!       IF (PRESENT(PSILN)) THEN
+!         IF (PRESENT(CHILN)) THEN
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN,CHILN=CHILN)
+!         ELSE
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,PSILN=PSILN)
+!         ENDIF
+!       ELSE
+!         IF (PRESENT(CHILN)) THEN
+!           CALL VELPROJ_VECTOR(U,PSI,CHI,CHILN=CHILN)
+!         ELSE
+!           CALL VELPROJ_VECTOR(U,PSI,CHI)
+!         ENDIF
+!       ENDIF
+
+!       PSI = DEL2_SCALAR(PSI) ! PSI NOW CONTAINS DEL2(PSI_U)
+!       CHI = DEL2_SCALAR(CHI) ! CHI NOW CONTAINS DEL2(CHI_U)
+!       DEL2U = PT2VEL_SCALAR_SCALAR(PSI, CHI) ! DEL2U=PROJ(DEL2(PSI_U),DEL2(CHI_U))=DEL2(PROJ(PSI_U,CHI_U))
+
+!       FORCE%ER = FINFO%VISC*DEL2U%ER - GRADP%ER
+!       FORCE%EP = FINFO%VISC*DEL2U%EP - GRADP%EP
+!       FORCE%EZ = FINFO%VISC*DEL2U%EZ - GRADP%EZ
+
+!       CALL DEALLOC( PSI )
+!       CALL DEALLOC( CHI )
+!       CALL DEALLOC( GRADP )
+!       CALL DEALLOC( DEL2U )
+
+!       RETURN
+!       END FUNCTION
+! ! ==========================================================================================================
