@@ -11,6 +11,7 @@ MODULE FIELDSTEP ! MODULE FOR 3D SCALAR/VECTOR FIELD TIME STEPPING SUBROUTINES &
       PUBLIC :: FLDSTEP_EXPLICIT
       PUBLIC :: FLDSTEP_SEMIIMP
       PUBLIC :: FLDSTEP_BOOTSTR
+      PUBLIC :: OUTPUT3D
 ! ==========================================================================================================
 !  INTERFACES ==============================================================================================
 ! ==========================================================================================================
@@ -38,6 +39,11 @@ MODULE FIELDSTEP ! MODULE FOR 3D SCALAR/VECTOR FIELD TIME STEPPING SUBROUTINES &
         MODULE PROCEDURE RICH
       END INTERFACE
 
+      INTERFACE OUTPUT3D
+        MODULE PROCEDURE OUTPUT3D_1
+        MODULE PROCEDURE OUTPUT3D_2
+        MODULE PROCEDURE OUTPUT3D_3
+      END INTERFACE
 CONTAINS
 ! ==========================================================================================================
 !  PUBLIC PROCEDURES =======================================================================================
@@ -51,7 +57,7 @@ CONTAINS
 ! CHI >> POLOIDAL COMPONENT OF U (VELOCITY FIELD) (IN FFF)
 ! PSIUXW >> TOROIDAL COMPONENT OF THE NONLINEAR TERM U X CURL(U) (OR U X W) (IN FFF)
 ! CHIUXW >> POLOIDAL COMPONENT OF THE NONLINEAR TERM U X CURL(U) (OR U X W) (IN FFF)
-! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD.
+! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD (IN PPP)
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! ==========================================================================================================
@@ -91,7 +97,7 @@ CONTAINS
 ! U >> VELOCITY VECTOR FIELD, WHICH MUST BE SOLENOIDAL. (IN PPP SPACE)
 ! PSIUXW >> TOROIDAL COMPONENT OF THE NONLINEAR TERM U X CURL(U) (OR U X W) (IN FFF)
 ! CHIUXW >> POLOIDAL COMPONENT OF THE NONLINEAR TERM U X CURL(U) (OR U X W) (IN FFF)
-! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD.
+! F >> (OPTIONAL) AN EXTERNAL (NONLINEAR) FORCE FIELD (IN PPP)
 ! [NOTES]:
 ! SANGJOON LEE @ JUNE 2023
 ! ==========================================================================================================
@@ -597,6 +603,287 @@ CONTAINS
       CALL DEALLOC( CHI1 )
       CALL DEALLOC( PSI2 )
       CALL DEALLOC( CHI2 )
+
+      RETURN
+      END SUBROUTINE
+! ==========================================================================================================
+      SUBROUTINE OUTPUT3D_1(U, W, C, OUTPUTPATH)
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U, W
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: C
+      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
+
+      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
+      INTEGER                           :: FU
+
+      INUM = 0; JNUM = 0; KNUM = 0
+      RSKIP = 1; PSKIP = 1; ZSKIP = 1
+
+      DO I=1,FINFO%NR,RSKIP
+        INUM=INUM+1
+      ENDDO
+      DO J=1,2*FINFO%NPH+1,PSKIP
+        JNUM=JNUM+1
+      ENDDO
+      DO K=1,FINFO%NZ+1,ZSKIP
+        KNUM=KNUM+1
+      ENDDO
+
+      OPEN(FU, FILE=OUTPUTPATH)
+
+      WRITE(FU,'(A150)')'variables= "x","y","z","ux","uy","uz","ur","up","wr","wp","wz","c"'
+      WRITE(FU,*)'ZONE T="', TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
+                 ', ZONETYPE=Ordered'
+      WRITE(FU,*)'DATAPACKING=POINT'
+      DO K=1,FINFO%NZ+1,ZSKIP
+        DO J=1,2*FINFO%NPH+1,PSKIP
+          DO I=1,FINFO%NR,RSKIP
+            KK = K
+            JJ = J
+            IF (K.EQ.FINFO%NZ+1) KK = 1
+            IF (J.EQ.2*FINFO%NPH+1) JJ = 1
+            IF (MOD(J,2).EQ.1) THEN
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(U%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK)),&
+                            REAL(U%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%ER(I,(JJ+1)/2,KK)),&
+                            REAL(W%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(C%E(I,(JJ+1)/2,KK))
+
+            ELSE
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(C%E(I,(JJ+1)/2,KK))
+            ENDIF
+          ENDDO
+        ENDDO
+      ENDDO
+
+      CLOSE(FU)
+      
+103   FORMAT(12E14.6)
+
+      RETURN
+      END SUBROUTINE
+! ==========================================================================================================
+      SUBROUTINE OUTPUT3D_2(U, W, C, U_UNP, W_UNP, OUTPUTPATH)
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U, W
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: C
+      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
+
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U_UNP, W_UNP
+
+      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
+      INTEGER                           :: FU
+
+      INUM = 0; JNUM = 0; KNUM = 0
+      RSKIP = 1; PSKIP = 1; ZSKIP = 1
+
+      DO I=1,FINFO%NR,RSKIP
+        INUM=INUM+1
+      ENDDO
+      DO J=1,2*FINFO%NPH+1,PSKIP
+        JNUM=JNUM+1
+      ENDDO
+      DO K=1,FINFO%NZ+1,ZSKIP
+        KNUM=KNUM+1
+      ENDDO
+
+      OPEN(FU, FILE=OUTPUTPATH)
+
+      WRITE(FU,'(A150)')'variables= "x","y","z","ux","uy","uz","ur","up","wr","wp","wz","c","ux`","uy`","uz`","ur`","up`","wr`","wp`","wz`"'
+      WRITE(FU,*)'ZONE T="', TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
+                 ', ZONETYPE=Ordered'
+      WRITE(FU,*)'DATAPACKING=POINT'
+      DO K=1,FINFO%NZ+1,ZSKIP
+        DO J=1,2*FINFO%NPH+1,PSKIP
+          DO I=1,FINFO%NR,RSKIP
+            KK = K
+            JJ = J
+            IF (K.EQ.FINFO%NZ+1) KK = 1
+            IF (J.EQ.2*FINFO%NPH+1) JJ = 1
+            IF (MOD(J,2).EQ.1) THEN
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(U%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK)),&
+                            REAL(U%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%ER(I,(JJ+1)/2,KK)),&
+                            REAL(W%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(C%E(I,(JJ+1)/2,KK)),&
+                            (REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))) - (REAL(U_UNP%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-REAL(U_UNP%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))),&
+                            (REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))) - (REAL(U_UNP%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+REAL(U_UNP%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))),&
+                            REAL(U%EZ(I,(JJ+1)/2,KK)) - REAL(U_UNP%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK)) - REAL(U_UNP%ER(I,(JJ+1)/2,KK)),&
+                            REAL(U%EP(I,(JJ+1)/2,KK)) - REAL(U_UNP%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%ER(I,(JJ+1)/2,KK)) - REAL(W_UNP%ER(I,(JJ+1)/2,KK)),&
+                            REAL(W%EP(I,(JJ+1)/2,KK)) - REAL(W_UNP%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%EZ(I,(JJ+1)/2,KK)) - REAL(W_UNP%EZ(I,(JJ+1)/2,KK))
+
+            ELSE
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(C%E(I,(JJ+1)/2,KK)),&
+                            (AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))) - (AIMAG(U_UNP%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-AIMAG(U_UNP%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))),&
+                            (AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))) - (AIMAG(U_UNP%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+AIMAG(U_UNP%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EP(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%ER(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EP(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EZ(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%EZ(I,(JJ+1)/2,KK))
+            ENDIF
+          ENDDO
+        ENDDO
+      ENDDO
+
+      CLOSE(FU)
+      
+103   FORMAT(20E14.6)
+
+      RETURN
+      END SUBROUTINE
+! ==========================================================================================================
+      SUBROUTINE OUTPUT3D_3(U, W, C, U_UNP, W_UNP, F, OUTPUTPATH)
+! ==========================================================================================================
+      IMPLICIT NONE
+
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U, W
+      TYPE(SCALAR_FIELD), INTENT(INOUT) :: C
+      CHARACTER(LEN=*), INTENT(IN)      :: OUTPUTPATH
+
+      TYPE(VECTOR_FIELD), INTENT(IN)    :: U_UNP, W_UNP, F
+
+      INTEGER                           :: I, J, JJ, K, KK, INUM, JNUM, KNUM, RSKIP, PSKIP, ZSKIP
+      INTEGER                           :: FU
+
+      INUM = 0; JNUM = 0; KNUM = 0
+      RSKIP = 1; PSKIP = 1; ZSKIP = 1
+
+      DO I=1,FINFO%NR,RSKIP
+        INUM=INUM+1
+      ENDDO
+      DO J=1,2*FINFO%NPH+1,PSKIP
+        JNUM=JNUM+1
+      ENDDO
+      DO K=1,FINFO%NZ+1,ZSKIP
+        KNUM=KNUM+1
+      ENDDO
+
+      OPEN(FU, FILE=OUTPUTPATH)
+
+      WRITE(FU,'(A150)')'variables= "x","y","z","ux","uy","uz","ur","up","wr","wp","wz","fr","fp","fz","c","ux`","uy`","uz`","ur`","up`","wr`","wp`","wz`"'
+      WRITE(FU,*)'ZONE T="', TRIM(ADJUSTL(NTOA(TINFO%T,'(F8.4)'))), '", I=',INUM,', J=',JNUM,', K=',KNUM, &
+                 ', ZONETYPE=Ordered'
+      WRITE(FU,*)'DATAPACKING=POINT'
+      DO K=1,FINFO%NZ+1,ZSKIP
+        DO J=1,2*FINFO%NPH+1,PSKIP
+          DO I=1,FINFO%NR,RSKIP
+            KK = K
+            JJ = J
+            IF (K.EQ.FINFO%NZ+1) KK = 1
+            IF (J.EQ.2*FINFO%NPH+1) JJ = 1
+            IF (MOD(J,2).EQ.1) THEN
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            REAL(U%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK)),&
+                            REAL(U%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%ER(I,(JJ+1)/2,KK)),&
+                            REAL(W%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(F%ER(I,(JJ+1)/2,KK)),&
+                            REAL(F%EP(I,(JJ+1)/2,KK)),&
+                            REAL(F%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(C%E(I,(JJ+1)/2,KK)),&
+                            (REAL(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-REAL(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))) - (REAL(U_UNP%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-REAL(U_UNP%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))),&
+                            (REAL(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+REAL(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))) - (REAL(U_UNP%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+REAL(U_UNP%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))),&
+                            REAL(U%EZ(I,(JJ+1)/2,KK)) - REAL(U_UNP%EZ(I,(JJ+1)/2,KK)),&
+                            REAL(U%ER(I,(JJ+1)/2,KK)) - REAL(U_UNP%ER(I,(JJ+1)/2,KK)),&
+                            REAL(U%EP(I,(JJ+1)/2,KK)) - REAL(U_UNP%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%ER(I,(JJ+1)/2,KK)) - REAL(W_UNP%ER(I,(JJ+1)/2,KK)),&
+                            REAL(W%EP(I,(JJ+1)/2,KK)) - REAL(W_UNP%EP(I,(JJ+1)/2,KK)),&
+                            REAL(W%EZ(I,(JJ+1)/2,KK)) - REAL(W_UNP%EZ(I,(JJ+1)/2,KK))
+
+            ELSE
+              WRITE(FU,103) FINFO%R(I)*COS(FINFO%P(JJ)),&
+                            FINFO%R(I)*SIN(FINFO%P(JJ)),&
+                            FINFO%Z(K),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))&
+                              -AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))&
+                              +AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ)),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(F%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(F%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(F%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(C%E(I,(JJ+1)/2,KK)),&
+                            (AIMAG(U%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-AIMAG(U%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))) - (AIMAG(U_UNP%ER(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))-AIMAG(U_UNP%EP(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))),&
+                            (AIMAG(U%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+AIMAG(U%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))) - (AIMAG(U_UNP%ER(I,(JJ+1)/2,KK))*SIN(FINFO%P(JJ))+AIMAG(U_UNP%EP(I,(JJ+1)/2,KK))*COS(FINFO%P(JJ))),&
+                            AIMAG(U%EZ(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%EZ(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%ER(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(U%EP(I,(JJ+1)/2,KK)) - AIMAG(U_UNP%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%ER(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%ER(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EP(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%EP(I,(JJ+1)/2,KK)),&
+                            AIMAG(W%EZ(I,(JJ+1)/2,KK)) - AIMAG(W_UNP%EZ(I,(JJ+1)/2,KK))
+            ENDIF
+          ENDDO
+        ENDDO
+      ENDDO
+
+      CLOSE(FU)
+      
+103   FORMAT(23E14.6)
 
       RETURN
       END SUBROUTINE
